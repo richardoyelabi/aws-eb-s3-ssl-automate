@@ -1,0 +1,25 @@
+# Configuration files with secrets
+config.env
+
+# Temporary files
+*.tmp
+*.log
+/tmp/
+
+# AWS credentials
+.aws/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# EB CLI
+.elasticbeanstalk/
+
