@@ -164,14 +164,31 @@ The script will:
 
 ### EB Platform Options
 
-Common platform strings (check [AWS documentation](https://docs.aws.amazon.com/elasticbeanstalk/latest/platforms/platforms-supported.html) for latest):
+Available platform strings (check [AWS documentation](https://docs.aws.amazon.com/elasticbeanstalk/latest/platforms/platforms-supported.html) for latest):
 
+#### Amazon Linux 2 Platforms
+- `"64bit Amazon Linux 2 v4.9.7 running Tomcat 9 Corretto 11"`
+- `"64bit Amazon Linux 2 v4.9.7 running Tomcat 9 Corretto 8"`
+- `"64bit Amazon Linux 2 v4.3.3 running Docker"`
+- `"64bit Amazon Linux 2 v3.10.7 running PHP 8.1"`
+- `"64bit Amazon Linux 2 v3.9.7 running Corretto 17"`
+- `"64bit Amazon Linux 2 v3.9.7 running Corretto 11"`
+- `"64bit Amazon Linux 2 v3.9.7 running Corretto 8"`
+- `"64bit Amazon Linux 2 v3.5.7 running ECS"`
+- `"64bit Amazon Linux 2 v2.11.7 running .NET Core"`
+
+#### Amazon Linux 2023 Platforms
 - `"Python 3.11 running on 64bit Amazon Linux 2023"`
-- `"Python 3.9 running on 64bit Amazon Linux 2"`
-- `"Node.js 18 running on 64bit Amazon Linux 2023"`
-- `"Node.js 16 running on 64bit Amazon Linux 2"`
-- `"Docker running on 64bit Amazon Linux 2"`
-- `"Go 1.20 running on 64bit Amazon Linux 2023"`
+
+#### Windows Server Platforms
+- `"64bit Windows Server 2025 v2.20.0 running IIS 10.0"`
+- `"64bit Windows Server Core 2025 v2.20.0 running IIS 10.0"`
+- `"64bit Windows Server 2022 v2.20.0 running IIS 10.0"`
+- `"64bit Windows Server Core 2022 v2.20.0 running IIS 10.0"`
+- `"64bit Windows Server 2019 v2.20.0 running IIS 10.0"`
+- `"64bit Windows Server Core 2019 v2.20.0 running IIS 10.0"`
+- `"64bit Windows Server 2016 v2.20.0 running IIS 10.0"`
+- `"64bit Windows Server Core 2016 v2.20.0 running IIS 10.0"`
 
 ### Instance Types
 
