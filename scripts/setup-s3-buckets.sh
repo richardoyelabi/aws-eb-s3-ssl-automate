@@ -58,16 +58,26 @@ configure_static_assets_bucket() {
 
     # Enable versioning if configured
     if [ "$ENABLE_S3_VERSIONING" = "true" ]; then
-        log_info "Enabling versioning on $bucket_name"
-        aws s3api put-bucket-versioning \
+        local current_versioning=$(aws s3api get-bucket-versioning \
             --bucket "$bucket_name" \
-            --versioning-configuration Status=Enabled \
             --profile "$AWS_PROFILE" \
-            --region "$region"
+            --region "$region" \
+            --query 'Status' \
+            --output text 2>/dev/null || echo "")
+        
+        if [ "$current_versioning" != "Enabled" ]; then
+            log_info "Enabling versioning on $bucket_name"
+            aws s3api put-bucket-versioning \
+                --bucket "$bucket_name" \
+                --versioning-configuration Status=Enabled \
+                --profile "$AWS_PROFILE" \
+                --region "$region"
+        else
+            log_info "Versioning already enabled on $bucket_name"
+        fi
     fi
 
     # Configure CORS for static assets
-    log_info "Configuring CORS for $bucket_name"
     cat > /tmp/cors-config.json <<EOF
 {
     "CORSRules": [
@@ -82,20 +92,64 @@ configure_static_assets_bucket() {
 }
 EOF
 
-    aws s3api put-bucket-cors \
+    # Check if CORS needs update
+    local current_cors=$(aws s3api get-bucket-cors \
         --bucket "$bucket_name" \
-        --cors-configuration file:///tmp/cors-config.json \
         --profile "$AWS_PROFILE" \
-        --region "$region"
+        --region "$region" 2>/dev/null || echo "")
+    
+    local needs_cors_update=true
+    if [ -n "$current_cors" ]; then
+        # Simple check: if CORS exists and contains our methods, assume it's configured
+        if echo "$current_cors" | grep -q "GET" && echo "$current_cors" | grep -q "HEAD"; then
+            log_info "CORS already configured for $bucket_name"
+            needs_cors_update=false
+        fi
+    fi
+    
+    if [ "$needs_cors_update" = true ]; then
+        log_info "Configuring CORS for $bucket_name"
+        aws s3api put-bucket-cors \
+            --bucket "$bucket_name" \
+            --cors-configuration file:///tmp/cors-config.json \
+            --profile "$AWS_PROFILE" \
+            --region "$region"
+    fi
 
-    # Block public access (we'll use IAM policies for EB access)
-    log_info "Configuring public access block for $bucket_name"
-    aws s3api put-public-access-block \
+    # Check current public access block settings
+    local current_pab=$(aws s3api get-public-access-block \
         --bucket "$bucket_name" \
-        --public-access-block-configuration \
-            "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
         --profile "$AWS_PROFILE" \
-        --region "$region"
+        --region "$region" \
+        --query 'PublicAccessBlockConfiguration' \
+        --output json 2>/dev/null || echo "")
+    
+    local needs_pab_update=false
+    if [ -z "$current_pab" ]; then
+        needs_pab_update=true
+    else
+        local block_public_acls=$(echo "$current_pab" | grep -o '"BlockPublicAcls": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        local ignore_public_acls=$(echo "$current_pab" | grep -o '"IgnorePublicAcls": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        local block_public_policy=$(echo "$current_pab" | grep -o '"BlockPublicPolicy": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        local restrict_public_buckets=$(echo "$current_pab" | grep -o '"RestrictPublicBuckets": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        
+        if [ "$block_public_acls" != "true" ] || [ "$ignore_public_acls" != "true" ] || \
+           [ "$block_public_policy" != "false" ] || [ "$restrict_public_buckets" != "false" ]; then
+            needs_pab_update=true
+        fi
+    fi
+    
+    if [ "$needs_pab_update" = true ]; then
+        log_info "Configuring public access block for $bucket_name"
+        aws s3api put-public-access-block \
+            --bucket "$bucket_name" \
+            --public-access-block-configuration \
+                "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
+            --profile "$AWS_PROFILE" \
+            --region "$region"
+    else
+        log_info "Public access block already configured for $bucket_name"
+    fi
 
     rm -f /tmp/cors-config.json
     log_info "Static assets bucket configured successfully"
@@ -109,16 +163,26 @@ configure_uploads_bucket() {
 
     # Enable versioning if configured
     if [ "$ENABLE_S3_VERSIONING" = "true" ]; then
-        log_info "Enabling versioning on $bucket_name"
-        aws s3api put-bucket-versioning \
+        local current_versioning=$(aws s3api get-bucket-versioning \
             --bucket "$bucket_name" \
-            --versioning-configuration Status=Enabled \
             --profile "$AWS_PROFILE" \
-            --region "$region"
+            --region "$region" \
+            --query 'Status' \
+            --output text 2>/dev/null || echo "")
+        
+        if [ "$current_versioning" != "Enabled" ]; then
+            log_info "Enabling versioning on $bucket_name"
+            aws s3api put-bucket-versioning \
+                --bucket "$bucket_name" \
+                --versioning-configuration Status=Enabled \
+                --profile "$AWS_PROFILE" \
+                --region "$region"
+        else
+            log_info "Versioning already enabled on $bucket_name"
+        fi
     fi
 
     # Configure CORS for uploads
-    log_info "Configuring CORS for $bucket_name"
     cat > /tmp/cors-config-uploads.json <<EOF
 {
     "CORSRules": [
@@ -133,20 +197,64 @@ configure_uploads_bucket() {
 }
 EOF
 
-    aws s3api put-bucket-cors \
+    # Check if CORS needs update
+    local current_cors=$(aws s3api get-bucket-cors \
         --bucket "$bucket_name" \
-        --cors-configuration file:///tmp/cors-config-uploads.json \
         --profile "$AWS_PROFILE" \
-        --region "$region"
+        --region "$region" 2>/dev/null || echo "")
+    
+    local needs_cors_update=true
+    if [ -n "$current_cors" ]; then
+        # Simple check: if CORS exists and contains our methods, assume it's configured
+        if echo "$current_cors" | grep -q "PUT" && echo "$current_cors" | grep -q "POST" && echo "$current_cors" | grep -q "DELETE"; then
+            log_info "CORS already configured for $bucket_name"
+            needs_cors_update=false
+        fi
+    fi
+    
+    if [ "$needs_cors_update" = true ]; then
+        log_info "Configuring CORS for $bucket_name"
+        aws s3api put-bucket-cors \
+            --bucket "$bucket_name" \
+            --cors-configuration file:///tmp/cors-config-uploads.json \
+            --profile "$AWS_PROFILE" \
+            --region "$region"
+    fi
 
-    # Block all public access for uploads bucket
-    log_info "Configuring public access block for $bucket_name"
-    aws s3api put-public-access-block \
+    # Check current public access block settings
+    local current_pab=$(aws s3api get-public-access-block \
         --bucket "$bucket_name" \
-        --public-access-block-configuration \
-            "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" \
         --profile "$AWS_PROFILE" \
-        --region "$region"
+        --region "$region" \
+        --query 'PublicAccessBlockConfiguration' \
+        --output json 2>/dev/null || echo "")
+    
+    local needs_pab_update=false
+    if [ -z "$current_pab" ]; then
+        needs_pab_update=true
+    else
+        local block_public_acls=$(echo "$current_pab" | grep -o '"BlockPublicAcls": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        local ignore_public_acls=$(echo "$current_pab" | grep -o '"IgnorePublicAcls": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        local block_public_policy=$(echo "$current_pab" | grep -o '"BlockPublicPolicy": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        local restrict_public_buckets=$(echo "$current_pab" | grep -o '"RestrictPublicBuckets": *[^,}]*' | cut -d':' -f2 | tr -d ' ')
+        
+        if [ "$block_public_acls" != "true" ] || [ "$ignore_public_acls" != "true" ] || \
+           [ "$block_public_policy" != "true" ] || [ "$restrict_public_buckets" != "true" ]; then
+            needs_pab_update=true
+        fi
+    fi
+    
+    if [ "$needs_pab_update" = true ]; then
+        log_info "Configuring public access block for $bucket_name"
+        aws s3api put-public-access-block \
+            --bucket "$bucket_name" \
+            --public-access-block-configuration \
+                "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" \
+            --profile "$AWS_PROFILE" \
+            --region "$region"
+    else
+        log_info "Public access block already configured for $bucket_name"
+    fi
 
     rm -f /tmp/cors-config-uploads.json
     log_info "Uploads bucket configured successfully"
@@ -171,7 +279,7 @@ main() {
 }
 
 # Run main function if script is executed directly
-if [ "${BASH_SOURCE[0]}" -eq "${0}" ]; then
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     main "$@"
 fi
 

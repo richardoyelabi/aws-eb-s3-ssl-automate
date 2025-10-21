@@ -117,6 +117,15 @@ attach_managed_policies() {
     done
 }
 
+normalize_json() {
+    local json_file=$1
+    if command -v jq &> /dev/null; then
+        jq -S -c . "$json_file" 2>/dev/null || cat "$json_file"
+    else
+        cat "$json_file" | tr -d ' \n\t'
+    fi
+}
+
 create_and_attach_s3_policy() {
     local role_name=$1
     local policy_name="${role_name}-s3-access"
@@ -130,7 +139,7 @@ create_and_attach_s3_policy() {
     local policy_arn="arn:aws:iam::${account_id}:policy/${policy_name}"
 
     if aws iam get-policy --policy-arn "$policy_arn" --profile "$AWS_PROFILE" 2>/dev/null; then
-        log_warn "Policy $policy_name already exists, updating it"
+        log_info "Policy $policy_name already exists, checking if update needed"
         
         # Get current default version
         local current_version=$(aws iam get-policy \
@@ -139,22 +148,65 @@ create_and_attach_s3_policy() {
             --query 'Policy.DefaultVersionId' \
             --output text)
         
-        # Create new version
-        aws iam create-policy-version \
+        # Get existing policy document
+        aws iam get-policy-version \
             --policy-arn "$policy_arn" \
-            --policy-document file:///tmp/s3-access-policy.json \
-            --set-as-default \
-            --profile "$AWS_PROFILE"
+            --version-id "$current_version" \
+            --profile "$AWS_PROFILE" \
+            --query 'PolicyVersion.Document' \
+            --output json > /tmp/existing-s3-policy.json
         
-        # Delete old version if it's not v1 (default)
-        if [ "$current_version" != "v1" ]; then
-            aws iam delete-policy-version \
+        # Normalize both JSON documents for comparison
+        local new_policy_normalized=$(normalize_json /tmp/s3-access-policy.json)
+        local existing_policy_normalized=$(normalize_json /tmp/existing-s3-policy.json)
+        
+        if [ "$new_policy_normalized" != "$existing_policy_normalized" ]; then
+            log_warn "Policy content has changed, creating new version"
+            
+            # List all non-default versions for cleanup
+            local all_versions=$(aws iam list-policy-versions \
                 --policy-arn "$policy_arn" \
-                --version-id "$current_version" \
-                --profile "$AWS_PROFILE" 2>/dev/null || true
+                --profile "$AWS_PROFILE" \
+                --query 'Versions[?IsDefaultVersion==`false`].VersionId' \
+                --output text)
+            
+            # Delete oldest non-default versions if we have 4 or more versions
+            local version_count=$(aws iam list-policy-versions \
+                --policy-arn "$policy_arn" \
+                --profile "$AWS_PROFILE" \
+                --query 'length(Versions)' \
+                --output text)
+            
+            if [ "$version_count" -ge 4 ]; then
+                log_info "Cleaning up old policy versions"
+                local oldest_version=$(aws iam list-policy-versions \
+                    --policy-arn "$policy_arn" \
+                    --profile "$AWS_PROFILE" \
+                    --query 'Versions[?IsDefaultVersion==`false`] | sort_by(@, &CreateDate) | [0].VersionId' \
+                    --output text)
+                
+                if [ -n "$oldest_version" ] && [ "$oldest_version" != "None" ]; then
+                    aws iam delete-policy-version \
+                        --policy-arn "$policy_arn" \
+                        --version-id "$oldest_version" \
+                        --profile "$AWS_PROFILE" 2>/dev/null || true
+                fi
+            fi
+            
+            # Create new version
+            aws iam create-policy-version \
+                --policy-arn "$policy_arn" \
+                --policy-document file:///tmp/s3-access-policy.json \
+                --set-as-default \
+                --profile "$AWS_PROFILE"
+        else
+            log_info "Policy content unchanged, skipping update"
         fi
+        
+        rm -f /tmp/existing-s3-policy.json
     else
         # Create new policy
+        log_info "Creating new policy"
         aws iam create-policy \
             --policy-name "$policy_name" \
             --policy-document file:///tmp/s3-access-policy.json \
@@ -180,7 +232,29 @@ create_instance_profile() {
 
     if aws iam get-instance-profile --instance-profile-name "$profile_name" --profile "$AWS_PROFILE" 2>/dev/null; then
         log_warn "Instance profile $profile_name already exists"
+        
+        # Check if role is attached to the profile
+        local attached_role=$(aws iam get-instance-profile \
+            --instance-profile-name "$profile_name" \
+            --profile "$AWS_PROFILE" \
+            --query "InstanceProfile.Roles[?RoleName=='$role_name'].RoleName | [0]" \
+            --output text 2>/dev/null)
+        
+        if [ -z "$attached_role" ] || [ "$attached_role" = "None" ]; then
+            log_warn "Role $role_name not attached to profile, attaching now"
+            aws iam add-role-to-instance-profile \
+                --instance-profile-name "$profile_name" \
+                --role-name "$role_name" \
+                --profile "$AWS_PROFILE" 2>/dev/null || log_warn "Role may already be attached or attachment failed"
+            
+            log_info "Waiting for IAM changes to propagate..."
+            sleep 10
+        else
+            log_info "Role $role_name is already attached to profile"
+        fi
+        
         export EB_INSTANCE_PROFILE="$profile_name"
+        echo "$profile_name" > /tmp/eb-instance-profile.txt
         return 0
     fi
 
@@ -237,7 +311,7 @@ main() {
 }
 
 # Run main function if script is executed directly
-if [ "${BASH_SOURCE[0]}" -eq "${0}" ]; then
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     main "$@"
 fi
 

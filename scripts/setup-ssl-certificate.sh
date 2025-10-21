@@ -48,24 +48,150 @@ find_certificate_by_domain() {
     echo "$cert_arn"
 }
 
+get_certificate_status() {
+    local cert_arn=$1
+    local region=$2
+
+    aws acm describe-certificate \
+        --certificate-arn "$cert_arn" \
+        --profile "$AWS_PROFILE" \
+        --region "$region" \
+        --query "Certificate.Status" \
+        --output text
+}
+
+display_dns_validation_records() {
+    local cert_arn=$1
+    local region=$2
+
+    log_info "Fetching DNS validation records..."
+    
+    local validation_records=$(aws acm describe-certificate \
+        --certificate-arn "$cert_arn" \
+        --profile "$AWS_PROFILE" \
+        --region "$region" \
+        --query "Certificate.DomainValidationOptions" \
+        --output json)
+
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "  DNS Validation Records Required"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "Add the following DNS records to your domain's DNS provider:"
+    echo ""
+    
+    if command -v jq &> /dev/null; then
+        echo "$validation_records" | jq -r '.[] | 
+            "\nDomain: \(.DomainName)\n" +
+            "Record Type: \(.ResourceRecord.Type)\n" +
+            "Record Name: \(.ResourceRecord.Name)\n" +
+            "Record Value: \(.ResourceRecord.Value)\n" +
+            "Status: \(.ValidationStatus)\n" +
+            "---"'
+    else
+        echo "$validation_records"
+        echo ""
+        log_warn "Install 'jq' for better formatted output"
+    fi
+    
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+}
+
+wait_for_certificate_validation() {
+    local cert_arn=$1
+    local region=$2
+    local max_attempts=${3:-60}  # Default 60 attempts = 30 minutes
+    local wait_interval=30  # 30 seconds between checks
+    
+    log_info "Polling for certificate validation..."
+    log_info "This may take 5-30 minutes. Checking every $wait_interval seconds..."
+    echo ""
+    
+    local attempt=0
+    while [ $attempt -lt $max_attempts ]; do
+        local status=$(get_certificate_status "$cert_arn" "$region")
+        
+        if [ "$status" = "ISSUED" ]; then
+            echo ""
+            log_info "Certificate has been successfully validated and issued!"
+            return 0
+        elif [ "$status" = "FAILED" ]; then
+            echo ""
+            log_error "Certificate validation failed"
+            return 1
+        fi
+        
+        # Show progress
+        attempt=$((attempt + 1))
+        local elapsed=$((attempt * wait_interval))
+        echo -ne "\r[$(date +'%H:%M:%S')] Status: $status | Elapsed: ${elapsed}s | Attempt: $attempt/$max_attempts"
+        
+        sleep $wait_interval
+    done
+    
+    echo ""
+    log_warn "Timeout waiting for certificate validation after $((max_attempts * wait_interval)) seconds"
+    return 1
+}
+
 validate_certificate() {
     local cert_arn=$1
     local region=$2
 
     log_info "Validating certificate: $cert_arn"
 
-    local cert_status=$(aws acm describe-certificate \
-        --certificate-arn "$cert_arn" \
-        --profile "$AWS_PROFILE" \
-        --region "$region" \
-        --query "Certificate.Status" \
-        --output text)
+    local cert_status=$(get_certificate_status "$cert_arn" "$region")
 
     if [ "$cert_status" = "ISSUED" ]; then
         log_info "Certificate is valid and issued"
         return 0
+    elif [ "$cert_status" = "PENDING_VALIDATION" ]; then
+        log_warn "Certificate is pending validation (Status: $cert_status)"
+        
+        # Display DNS validation records
+        display_dns_validation_records "$cert_arn" "$region"
+        
+        echo ""
+        echo "What would you like to do?"
+        echo "  1) Wait for validation (poll every 30 seconds)"
+        echo "  2) Exit and continue later (after adding DNS records)"
+        echo "  3) Skip SSL configuration for now"
+        echo ""
+        read -p "Enter your choice (1-3): " choice
+        
+        case $choice in
+            1)
+                echo ""
+                log_info "Waiting for certificate validation..."
+                if wait_for_certificate_validation "$cert_arn" "$region" 60; then
+                    return 0
+                else
+                    log_error "Certificate validation failed or timed out"
+                    return 1
+                fi
+                ;;
+            2)
+                echo ""
+                log_info "Please add the DNS records shown above to your DNS provider"
+                log_info "After adding the records, wait a few minutes and re-run this script"
+                exit 0
+                ;;
+            3)
+                echo ""
+                log_warn "Skipping SSL configuration"
+                log_warn "You can configure SSL later using the AWS console or by re-running this script"
+                exit 0
+                ;;
+            *)
+                log_error "Invalid choice"
+                return 1
+                ;;
+        esac
     else
         log_error "Certificate status is: $cert_status (expected: ISSUED)"
+        log_error "Please check the certificate in AWS Certificate Manager console"
         return 1
     fi
 }
@@ -135,7 +261,7 @@ main() {
 }
 
 # Run main function if script is executed directly
-if [ "${BASH_SOURCE[0]}" -eq "${0}" ]; then
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     main "$@"
 fi
 

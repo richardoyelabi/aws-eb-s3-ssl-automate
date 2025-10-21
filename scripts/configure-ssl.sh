@@ -30,6 +30,37 @@ configure_https_listener() {
 
     log_info "Configuring HTTPS listener for environment: $env_name"
 
+    # Check current configuration
+    local current_config=$(aws elasticbeanstalk describe-configuration-settings \
+        --application-name "$app_name" \
+        --environment-name "$env_name" \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        --query 'ConfigurationSettings[0].OptionSettings' \
+        --output json)
+    
+    # Extract current HTTPS settings
+    local current_protocol=$(echo "$current_config" | grep -A2 '"Namespace": "aws:elbv2:listener:443"' | grep '"OptionName": "Protocol"' -A1 | grep '"Value"' | cut -d'"' -f4 || echo "")
+    local current_cert=$(echo "$current_config" | grep -A2 '"Namespace": "aws:elbv2:listener:443"' | grep '"OptionName": "SSLCertificateArns"' -A1 | grep '"Value"' | cut -d'"' -f4 || echo "")
+    local current_ssl_policy=$(echo "$current_config" | grep -A2 '"Namespace": "aws:elbv2:listener:443"' | grep '"OptionName": "SSLPolicy"' -A1 | grep '"Value"' | cut -d'"' -f4 || echo "")
+    
+    # Check if configuration needs update
+    local needs_update=false
+    if [ "$current_protocol" != "HTTPS" ] || [ "$current_cert" != "$cert_arn" ] || [ "$current_ssl_policy" != "$SSL_POLICY" ]; then
+        needs_update=true
+    fi
+    
+    if [ "$needs_update" = false ]; then
+        log_info "HTTPS listener already configured correctly, skipping update"
+        return 0
+    fi
+    
+    log_info "HTTPS configuration needs update"
+    if [ -n "$current_protocol" ]; then
+        log_info "Current: Protocol=$current_protocol, Cert=$current_cert, SSLPolicy=$current_ssl_policy"
+    fi
+    log_info "Desired: Protocol=HTTPS, Cert=$cert_arn, SSLPolicy=$SSL_POLICY"
+
     # Create option settings for HTTPS
     cat > /tmp/https-options.json <<EOF
 [
@@ -194,7 +225,7 @@ main() {
 }
 
 # Run main function if script is executed directly
-if [ "${BASH_SOURCE[0]}" -eq "${0}" ]; then
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     main "$@"
 fi
 

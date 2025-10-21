@@ -122,7 +122,7 @@ chmod +x tests/test-setup.sh
 
 ### 4. Request SSL Certificate (if needed)
 
-If you don't have an ACM certificate yet:
+If you don't have an ACM certificate yet, you can request one:
 
 ```bash
 aws acm request-certificate \
@@ -130,10 +130,12 @@ aws acm request-certificate \
   --subject-alternative-names "*.example.com" \
   --validation-method DNS \
   --region us-east-1
-
-# Follow the DNS validation instructions
-# Wait for certificate to be issued (usually 5-30 minutes)
 ```
+
+**Note:** You don't need to wait for the certificate to be issued before running the setup script. The script will automatically detect if your certificate is pending validation, display the required DNS records, and give you options to:
+- Wait for validation (with automatic polling)
+- Exit and continue later after adding DNS records
+- Skip SSL configuration temporarily
 
 ### 5. Run Setup
 
@@ -146,11 +148,17 @@ chmod +x setup-eb-environment.sh
 
 The script will:
 1. Create S3 buckets with appropriate configurations
-2. Validate your SSL certificate
+2. Find and validate your SSL certificate (or guide you through DNS validation)
 3. Set up IAM roles and policies
 4. Create the Elastic Beanstalk environment
 5. Configure HTTPS on the load balancer
 6. Display deployment instructions
+
+**SSL Certificate Validation:**
+- If your certificate is already issued, the script continues automatically
+- If pending validation, the script displays the DNS records you need to add
+- You can choose to wait for validation, or exit and return later
+- The script polls AWS every 30 seconds until validation completes
 
 ## Configuration Options
 
@@ -205,6 +213,100 @@ Available SSL policies (most secure to most compatible):
 # Show help
 ./setup-eb-environment.sh --help
 ```
+
+## Idempotency
+
+The scripts are designed to be **idempotent**, meaning you can safely run them multiple times without causing errors or creating duplicate resources. This is useful for:
+
+- Re-running after configuration changes
+- Recovering from partial failures
+- Updating existing environments with new settings
+
+### What Happens on Subsequent Runs
+
+#### ✅ Safe Re-run Behavior
+
+When you run the scripts on an existing setup:
+
+**S3 Buckets:**
+- Existing buckets are detected and skipped
+- Configuration (CORS, versioning, public access) is only updated if it differs from desired state
+- No unnecessary API calls are made if configuration is already correct
+
+**IAM Roles and Policies:**
+- Existing roles and policies are detected and reused
+- Policy documents are compared before creating new versions
+- Old policy versions are automatically cleaned up to stay within AWS's 5-version limit
+- Role attachments to instance profiles are verified and fixed if missing
+
+**Elastic Beanstalk Environment:**
+- Existing applications and environments are detected
+- Configuration is compared with desired state from `config.env`
+- If changes are detected, you'll be prompted before updating (to avoid unexpected downtime)
+- Only necessary updates are applied
+
+**HTTPS Configuration:**
+- Current HTTPS listener settings are checked before updating
+- Updates are skipped if certificate ARN and SSL policy are already correct
+- No environment restarts triggered for unchanged configuration
+
+**SSL Certificate:**
+- Existing certificates are found and validated
+- No new certificates are created if one already exists for your domain
+
+#### ⚠️ Configuration Updates with User Confirmation
+
+If you change settings in `config.env` and re-run the scripts, the following will prompt for confirmation:
+
+**Elastic Beanstalk Environment Updates:**
+When instance type, scaling settings, or environment variables change:
+```
+[WARN] Environment configuration has changed. The following will be updated:
+  - Instance Type
+  - Min Instances
+  - STATIC_ASSETS_BUCKET env var
+
+[WARN] Updating the environment may cause brief downtime or service interruption.
+Do you want to update the environment? (yes/no):
+```
+
+### Example: Re-running After Config Changes
+
+```bash
+# Initial run - creates everything
+./setup-eb-environment.sh
+
+# Later, you change INSTANCE_TYPE in config.env from t3.micro to t3.small
+nano config.env
+
+# Re-run - will detect the change and prompt
+./setup-eb-environment.sh
+# Output:
+# [INFO] Application my-app already exists
+# [WARN] Environment my-app-prod already exists
+# [INFO] Checking if environment configuration needs update...
+# [WARN] Environment configuration has changed. The following will be updated:
+#   - Instance Type
+# [WARN] Updating the environment may cause brief downtime or service interruption.
+# Do you want to update the environment? (yes/no): yes
+# [INFO] Updating environment configuration...
+```
+
+### No Duplicate Resources
+
+The scripts will **never** create duplicate resources:
+- S3 bucket names are unique, so attempts to recreate will be safely skipped
+- IAM roles are checked by name before creation
+- EB applications and environments are checked before creation
+- Certificate lookups find existing certificates by domain name
+
+### Benefits
+
+1. **Safe to Re-run**: Fix failures or incomplete runs without manual cleanup
+2. **Configuration Management**: Update settings by editing `config.env` and re-running
+3. **No Manual Cleanup Needed**: Scripts handle existing resources gracefully
+4. **Efficient**: Skips unnecessary API calls and updates
+5. **Policy Version Management**: Automatically cleans up old IAM policy versions
 
 ## Project Structure
 
@@ -394,6 +496,26 @@ aws elasticbeanstalk describe-events \
 - Resource limits reached
 - Instance type not available in region
 
+### SSL Certificate Validation Issues
+
+**If certificate is pending validation:**
+
+The script will automatically display the DNS records you need to add. If you've already run the script, you can check the validation records manually:
+
+```bash
+aws acm describe-certificate \
+  --certificate-arn YOUR_CERT_ARN \
+  --region us-east-1 \
+  --query "Certificate.DomainValidationOptions"
+```
+
+Add the CNAME records to your DNS provider and wait 5-30 minutes for validation.
+
+**Common issues:**
+- DNS records not added correctly (check Name and Value exactly match AWS requirements)
+- DNS propagation delay (can take up to 30 minutes)
+- Using the wrong DNS zone or subdomain
+
 ### HTTPS Not Working
 
 **Verify certificate:**
@@ -410,7 +532,7 @@ aws elbv2 describe-listeners \
 ```
 
 **Common issues:**
-- Certificate not in ISSUED status
+- Certificate not in ISSUED status (must be validated first)
 - DNS not pointing to load balancer
 - Security group blocking port 443
 - Need to wait for DNS propagation (up to 48 hours)

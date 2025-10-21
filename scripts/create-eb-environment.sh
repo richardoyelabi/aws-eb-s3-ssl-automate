@@ -130,6 +130,108 @@ create_environment_options() {
 EOF
 }
 
+compare_configuration() {
+    local current_config=$1
+    local namespace=$2
+    local option_name=$3
+    local desired_value=$4
+    
+    local current_value=$(echo "$current_config" | grep -B2 "\"OptionName\": \"$option_name\"" | grep "\"Namespace\": \"$namespace\"" -A2 | grep "\"Value\"" | cut -d'"' -f4 || echo "")
+    
+    if [ "$current_value" != "$desired_value" ]; then
+        echo "different"
+    else
+        echo "same"
+    fi
+}
+
+update_environment_configuration() {
+    local app_name=$1
+    local env_name=$2
+    local cert_arn=$3
+    local instance_profile=$4
+    
+    log_info "Checking if environment configuration needs update..."
+    
+    # Get current configuration
+    local current_config=$(aws elasticbeanstalk describe-configuration-settings \
+        --application-name "$app_name" \
+        --environment-name "$env_name" \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        --query 'ConfigurationSettings[0].OptionSettings' \
+        --output json)
+    
+    # Check key configuration values
+    local needs_update=false
+    local changes=()
+    
+    # Check instance type
+    if [ "$(compare_configuration "$current_config" "aws:autoscaling:launchconfiguration" "InstanceType" "$INSTANCE_TYPE")" = "different" ]; then
+        needs_update=true
+        changes+=("Instance Type")
+    fi
+    
+    # Check min instances
+    if [ "$(compare_configuration "$current_config" "aws:autoscaling:asg" "MinSize" "$MIN_INSTANCES")" = "different" ]; then
+        needs_update=true
+        changes+=("Min Instances")
+    fi
+    
+    # Check max instances
+    if [ "$(compare_configuration "$current_config" "aws:autoscaling:asg" "MaxSize" "$MAX_INSTANCES")" = "different" ]; then
+        needs_update=true
+        changes+=("Max Instances")
+    fi
+    
+    # Check environment variables
+    if [ "$(compare_configuration "$current_config" "aws:elasticbeanstalk:application:environment" "STATIC_ASSETS_BUCKET" "$STATIC_ASSETS_BUCKET")" = "different" ]; then
+        needs_update=true
+        changes+=("STATIC_ASSETS_BUCKET env var")
+    fi
+    
+    if [ "$(compare_configuration "$current_config" "aws:elasticbeanstalk:application:environment" "UPLOADS_BUCKET" "$UPLOADS_BUCKET")" = "different" ]; then
+        needs_update=true
+        changes+=("UPLOADS_BUCKET env var")
+    fi
+    
+    if [ "$needs_update" = false ]; then
+        log_info "Environment configuration is up to date"
+        return 0
+    fi
+    
+    # Prompt user for confirmation
+    log_warn "Environment configuration has changed. The following will be updated:"
+    for change in "${changes[@]}"; do
+        echo "  - $change"
+    done
+    echo ""
+    log_warn "Updating the environment may cause brief downtime or service interruption."
+    read -p "Do you want to update the environment? (yes/no): " -r
+    echo ""
+    
+    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+        log_info "Skipping environment update"
+        return 0
+    fi
+    
+    log_info "Updating environment configuration..."
+    create_environment_options "$cert_arn" "$instance_profile"
+    
+    aws elasticbeanstalk update-environment \
+        --application-name "$app_name" \
+        --environment-name "$env_name" \
+        --option-settings file:///tmp/eb-options.json \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION"
+    
+    log_info "Waiting for environment update to complete..."
+    sleep 30
+    
+    rm -f /tmp/eb-options.json
+    log_info "Environment configuration updated successfully"
+}
+
 create_environment() {
     local app_name=$1
     local env_name=$2
@@ -143,6 +245,9 @@ create_environment() {
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION" 2>/dev/null | grep -q "$env_name"; then
         log_warn "Environment $env_name already exists"
+        
+        # Check if configuration needs update
+        update_environment_configuration "$app_name" "$env_name" "$cert_arn" "$instance_profile"
         return 0
     fi
 
@@ -255,7 +360,7 @@ main() {
 }
 
 # Run main function if script is executed directly
-if [ "${BASH_SOURCE[0]}" -eq "${0}" ]; then
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     main "$@"
 fi
 
