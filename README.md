@@ -491,7 +491,7 @@ This project is provided as-is for educational and automation purposes.
 
 For issues and questions:
 - Check the [Troubleshooting](#troubleshooting) section
-- Review [AWS Elastic Beanstalk documentation](https://docs.aws.amazon.com/elasticbeanstalk/)
+- Review [AWS Elastic Beanstalk documentation](https://docs.aws.amazon.com/elastic-beanstalk/)
 - Open an issue in the repository
 
 ## Acknowledgments
