@@ -215,6 +215,13 @@ Available SSL policies (most secure to most compatible):
 ./setup-eb-environment.sh
 ```
 
+**Expected Execution Time:** 5-15 minutes, depending on:
+- AWS resource creation time (environment creation typically takes 5-10 minutes)
+- SSL certificate validation status
+- Network latency
+
+The script provides real-time progress updates and will wait up to 15 minutes for environment creation to complete. If the environment is still launching after the timeout, the script will display a warning but the environment will continue to launch in the background.
+
 ### Advanced Options
 
 ```bash
@@ -339,6 +346,7 @@ The scripts will **never** create duplicate resources:
 │   ├── setup-iam-roles.sh          # IAM role and policy setup
 │   ├── create-eb-environment.sh    # EB environment creation
 │   ├── configure-ssl.sh            # Load balancer SSL configuration
+│   ├── check-environment-status.sh # Quick environment status checker
 │   └── generate-deployment-instructions.sh  # Deployment guide generator
 ├── tests/
 │   └── test-setup.sh               # Validation and testing script
@@ -435,6 +443,22 @@ s3.getObject(getParams, (err, data) => {
 
 ## Managing Your Environment
 
+### Quick Status Check
+
+Use the included status checker script to quickly verify your environment health:
+
+```bash
+./scripts/check-environment-status.sh
+```
+
+This will show:
+- Current environment status (Ready, Launching, etc.)
+- Health status (Green, Yellow, Red)
+- Recent events and logs
+- Environment URL
+
+This is especially useful after the setup script times out to verify if the environment completed successfully.
+
 ### Common EB CLI Commands
 
 ```bash
@@ -512,6 +536,41 @@ aws elasticbeanstalk describe-events \
 - Invalid platform selection
 - Resource limits reached
 - Instance type not available in region
+
+### Script Timeout During Environment Creation
+
+If the script times out while waiting for the environment to become ready:
+
+**Check environment status:**
+```bash
+aws elasticbeanstalk describe-environments \
+  --application-name ride-jaunt-server \
+  --environment-names development \
+  --query "Environments[0].[Status,Health,HealthStatus]" \
+  --output table
+```
+
+**What to do:**
+
+1. **Environment is "Ready" with "Green" or "Yellow" health:** 
+   - The environment launched successfully! The script timed out but the environment is working.
+   - Continue to the next steps (SSL configuration if needed)
+
+2. **Environment is still "Launching":**
+   - Wait a few more minutes and check again
+   - Environment creation typically takes 5-10 minutes
+   - Check recent events for progress:
+   ```bash
+   aws elasticbeanstalk describe-events \
+     --application-name ride-jaunt-server \
+     --environment-name development \
+     --max-items 20
+   ```
+
+3. **Environment status is "Terminated" or shows errors:**
+   - Check the events log for error messages
+   - Common issues: IAM role problems, VPC/subnet issues, instance launch failures
+   - Delete the failed environment and retry
 
 ### SSL Certificate Validation Issues
 

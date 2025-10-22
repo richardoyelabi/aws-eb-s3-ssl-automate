@@ -266,42 +266,65 @@ create_environment() {
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION"
 
-    log_info "Environment creation initiated. This may take several minutes..."
+    log_info "Environment creation initiated. This may take 5-10 minutes..."
     
-    # Wait for environment to be ready
+    # Wait for environment to be ready with extended timeout
     log_info "Waiting for environment to become ready..."
-    aws elasticbeanstalk wait environment-exists \
-        --application-name "$app_name" \
-        --environment-names "$env_name" \
-        --profile "$AWS_PROFILE" \
-        --region "$AWS_REGION"
-
-    log_info "Waiting for environment health to stabilize..."
-    local max_wait=600  # 10 minutes
+    local max_wait=900  # 15 minutes
     local elapsed=0
-    local sleep_interval=30
+    local sleep_interval=20
+    local last_status=""
 
     while [ $elapsed -lt $max_wait ]; do
-        local status=$(aws elasticbeanstalk describe-environments \
+        # Get both status and health for better visibility
+        local env_info=$(aws elasticbeanstalk describe-environments \
             --application-name "$app_name" \
             --environment-names "$env_name" \
             --profile "$AWS_PROFILE" \
             --region "$AWS_REGION" \
-            --query "Environments[0].Status" \
-            --output text)
+            --query "Environments[0].[Status,Health]" \
+            --output text 2>/dev/null)
+        
+        local status=$(echo "$env_info" | awk '{print $1}')
+        local health=$(echo "$env_info" | awk '{print $2}')
 
+        # Check for terminal states
         if [ "$status" = "Ready" ]; then
-            log_info "Environment is ready!"
-            break
+            log_info "Environment is ready with health: $health"
+            
+            # Additional health check for production readiness
+            if [ "$health" = "Green" ] || [ "$health" = "Yellow" ]; then
+                log_info "Environment health is acceptable: $health"
+                break
+            else
+                log_warn "Environment is Ready but health is: $health"
+                log_info "Waiting for health to stabilize..."
+            fi
         elif [ "$status" = "Terminated" ] || [ "$status" = "Terminating" ]; then
             log_error "Environment creation failed with status: $status"
+            log_error "Check AWS Console for detailed error messages"
             exit 1
         fi
 
-        log_info "Current status: $status (waiting...)"
+        # Show progress only when status changes to reduce noise
+        if [ "$status" != "$last_status" ]; then
+            log_info "Status: $status | Health: $health | Elapsed: ${elapsed}s / ${max_wait}s"
+            last_status="$status"
+        elif [ $((elapsed % 60)) -eq 0 ]; then
+            # Show periodic update every minute
+            log_info "Still waiting... Status: $status | Health: $health | Elapsed: ${elapsed}s / ${max_wait}s"
+        fi
+
         sleep $sleep_interval
         elapsed=$((elapsed + sleep_interval))
     done
+
+    # Check if we timed out
+    if [ $elapsed -ge $max_wait ]; then
+        log_warn "Wait timeout reached (${max_wait}s). Environment may still be launching."
+        log_warn "Check environment status with: aws elasticbeanstalk describe-environments --application-name $app_name --environment-names $env_name"
+        log_warn "The environment may complete successfully - verify in AWS Console"
+    fi
 
     rm -f /tmp/eb-options.json
 }
