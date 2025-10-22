@@ -12,15 +12,15 @@ YELLOW="\033[1;33m"
 NC="\033[0m" # No Color
 
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 create_application() {
@@ -53,7 +53,7 @@ get_solution_stack_name() {
     local stack_name=$(aws elasticbeanstalk list-available-solution-stacks \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION" \
-        --query "SolutionStacks[?contains(@, '$platform')] | [0]" \
+        --query "SolutionStacks[?contains(@, \`$platform\`)] | [0]" \
         --output text)
 
     if [ -z "$stack_name" ] || [ "$stack_name" = "None" ]; then
