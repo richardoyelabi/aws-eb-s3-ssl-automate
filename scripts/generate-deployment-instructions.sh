@@ -85,19 +85,79 @@ ${YELLOW}Step 3: Access S3 buckets from your application${NC}
         ExpiresIn=3600
     )
 
-${YELLOW}Step 4: Configure your domain (optional)${NC}
+${YELLOW}Step 4: Configure your custom domain (optional)${NC}
 
-  To use your custom domain ($DOMAIN_NAME) with this environment:
+EOF
 
+    # Check if custom domain was configured
+    if [ -f /tmp/custom-domain.txt ]; then
+        local custom_domain=$(cat /tmp/custom-domain.txt)
+        cat <<EOF
+  ${GREEN}✓ Custom domain configured: $custom_domain${NC}
+
+  Your application should be accessible at:
+    https://$custom_domain (after DNS propagates)
+
+  To verify DNS configuration:
+    dig $custom_domain +short
+    # or
+    nslookup $custom_domain
+
+EOF
+    else
+        cat <<EOF
+  To use a custom domain with this environment:
+
+  ${CYAN}Option 1: Manual DNS Configuration${NC}
   1. Create a CNAME record in your DNS provider:
      
-     CNAME: $DOMAIN_NAME -> $env_url
+     For subdomain (api.example.com, www.example.com):
+       Record Type: CNAME
+       Name:        subdomain (e.g., api, www)
+       Target:      $env_url
+       TTL:         300
 
-  2. Wait for DNS propagation (can take up to 48 hours)
+     For root domain (example.com):
+       Record Type: ALIAS (or A with IP lookup)
+       Name:        @ (or leave blank)
+       Target:      $env_url
+       TTL:         300
 
-  3. Access your application at: https://$DOMAIN_NAME
+  2. Wait for DNS propagation (usually 5-30 minutes, can take up to 48 hours)
 
-${YELLOW}Step 5: Monitor your environment${NC}
+  ${CYAN}Option 2: Automatic Route 53 Configuration${NC}
+  1. Update config.env:
+       CUSTOM_DOMAIN="your-domain.com"
+       AUTO_CONFIGURE_DNS="true"
+
+  2. Re-run the setup script:
+       ./setup-eb-environment.sh
+
+  The script will automatically create DNS records in Route 53 (if hosted there)
+
+EOF
+    fi
+
+    cat <<EOF
+${YELLOW}Step 5: Manage additional domains or subdomains${NC}
+
+  You can add multiple domains/subdomains pointing to this environment:
+
+  ${CYAN}Using the Route 53 DNS management script:${NC}
+    
+    # List your hosted zones
+    ./scripts/setup-route53-dns.sh list-zones
+    
+    # Create a CNAME record for a subdomain
+    ./scripts/setup-route53-dns.sh create-cname ZONE_ID api.example.com $env_url
+    
+    # Create an ALIAS record for root domain (requires load balancer zone ID)
+    # ./scripts/setup-route53-dns.sh create-alias ZONE_ID example.com $env_url LB_ZONE_ID
+    
+    # View all commands
+    ./scripts/setup-route53-dns.sh help
+
+${YELLOW}Step 6: Monitor your environment${NC}
 
   # View environment status
   eb status $ENV_NAME --profile $AWS_PROFILE

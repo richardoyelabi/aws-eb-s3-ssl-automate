@@ -162,6 +162,14 @@ configure_ssl() {
     main
 }
 
+configure_custom_domain() {
+    log_section "Configuring Custom Domain"
+    
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/scripts/configure-custom-domain.sh"
+    main
+}
+
 generate_instructions() {
     log_section "Setup Complete!"
     
@@ -180,6 +188,8 @@ cleanup_temp_files() {
     rm -f /tmp/s3-access-policy.json
     rm -f /tmp/eb-options.json
     rm -f /tmp/https-options.json
+    rm -f /tmp/custom-domain.txt
+    rm -f /tmp/route53-*.json
 }
 
 show_usage() {
@@ -286,19 +296,26 @@ main() {
     local start_time=$(date +%s)
 
     setup_s3_buckets
-    
+
+    # Configure SSL - always enable HTTPS, but conditionally require certificates
     if [ "$skip_ssl" = false ]; then
-        setup_ssl_certificate
+        if [ -n "$CUSTOM_DOMAIN" ]; then
+            # Custom domain requires ACM certificate
+            setup_ssl_certificate
+        else
+            log_info "Using AWS automatic SSL for default Elastic Beanstalk domain"
+        fi
+        # Always configure HTTPS listener (with or without custom certificates)
+        configure_ssl
     else
-        log_warn "Skipping SSL certificate validation"
+        log_warn "Skipping SSL configuration entirely (--skip-ssl flag used)"
     fi
-    
+
     setup_iam_roles
     create_eb_environment
-    
-    if [ "$skip_ssl" = false ]; then
-        configure_ssl
-    fi
+
+    # Configure custom domain if enabled
+    configure_custom_domain
 
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))

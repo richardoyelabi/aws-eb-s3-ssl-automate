@@ -7,6 +7,8 @@ A shell script automation tool that sets up a complete AWS Elastic Beanstalk env
 - **Automated EB Environment Creation**: Creates and configures Elastic Beanstalk application and environment
 - **Dual S3 Buckets**: Sets up separate buckets for static assets (read-only) and file uploads (full access)
 - **SSL/HTTPS Configuration**: Integrates with AWS Certificate Manager for HTTPS support
+- **Custom Domain Configuration**: Supports custom domains and subdomains with optional Route 53 automation
+- **Route 53 DNS Management**: Automatically creates DNS records for custom domains (if hosted in Route 53)
 - **IAM Role Management**: Creates or configures IAM roles with appropriate S3 permissions
 - **Load Balancer Setup**: Configures Application Load Balancer with HTTPS listener and optional HTTP redirect
 - **Environment Variables**: Automatically configures environment variables for S3 bucket access
@@ -101,6 +103,10 @@ EB_PLATFORM="Python 3.11 running on 64bit Amazon Linux 2023"
 # Domain and SSL
 DOMAIN_NAME="example.com"
 
+# Custom Domain (optional)
+CUSTOM_DOMAIN="api.example.com"  # Your custom domain or subdomain
+AUTO_CONFIGURE_DNS="true"        # Automatically configure Route 53 DNS
+
 # S3 Buckets (must be globally unique)
 STATIC_ASSETS_BUCKET="my-app-static-us-east-1"
 UPLOADS_BUCKET="my-app-uploads-us-east-1"
@@ -118,6 +124,10 @@ Run the validation script to check prerequisites and configuration:
 ```bash
 chmod +x tests/test-setup.sh
 ./tests/test-setup.sh
+
+# Optional: Test custom domain functionality
+chmod +x tests/test-custom-domain.sh
+./tests/test-custom-domain.sh
 ```
 
 ### 4. Request SSL Certificate (if needed)
@@ -152,7 +162,8 @@ The script will:
 3. Set up IAM roles and policies
 4. Create the Elastic Beanstalk environment
 5. Configure HTTPS on the load balancer
-6. Display deployment instructions
+6. Configure custom domain (if specified)
+7. Display deployment instructions
 
 **SSL Certificate Validation:**
 - If your certificate is already issued, the script continues automatically
@@ -278,6 +289,12 @@ When you run the scripts on an existing setup:
 - Existing certificates are found and validated
 - No new certificates are created if one already exists for your domain
 
+**Custom Domain (Route 53):**
+- Existing DNS records are detected before creating new ones
+- If record exists and points to correct target, creation is skipped
+- If record exists but points to different target, it's updated
+- No duplicate records are created
+
 #### ⚠️ Configuration Updates with User Confirmation
 
 If you change settings in `config.env` and re-run the scripts, the following will prompt for confirmation:
@@ -323,6 +340,7 @@ The scripts will **never** create duplicate resources:
 - IAM roles are checked by name before creation
 - EB applications and environments are checked before creation
 - Certificate lookups find existing certificates by domain name
+- Route 53 DNS records are checked before creation; existing matching records are skipped
 
 ### Benefits
 
@@ -346,12 +364,248 @@ The scripts will **never** create duplicate resources:
 │   ├── setup-iam-roles.sh          # IAM role and policy setup
 │   ├── create-eb-environment.sh    # EB environment creation
 │   ├── configure-ssl.sh            # Load balancer SSL configuration
-│   ├── check-environment-status.sh # Quick environment status checker
+│   ├── configure-custom-domain.sh  # Custom domain configuration
+│   ├── setup-route53-dns.sh        # Route 53 DNS management utility
 │   └── generate-deployment-instructions.sh  # Deployment guide generator
 ├── tests/
-│   └── test-setup.sh               # Validation and testing script
+│   ├── test-setup.sh               # Validation and testing script
+│   └── test-custom-domain.sh       # Custom domain functionality tests
 └── templates/
     └── eb-options.json             # EB option settings template
+```
+
+## Custom Domain Configuration
+
+### Overview
+
+The automation supports configuring custom domains or subdomains for your Elastic Beanstalk environment with two options:
+1. **Automatic Route 53 Configuration**: Automatically creates DNS records if your domain is hosted in Route 53
+2. **Manual DNS Configuration**: Provides instructions for manual DNS setup with any provider
+
+### Quick Setup
+
+#### Option 1: Automatic Configuration (Route 53)
+
+If your domain is hosted in Route 53:
+
+```bash
+# In config.env
+CUSTOM_DOMAIN="api.example.com"
+AUTO_CONFIGURE_DNS="true"
+
+# Run setup
+./setup-eb-environment.sh
+```
+
+The script will automatically:
+- Detect your Route 53 hosted zone
+- Check if DNS record already exists and is correct
+- Skip if record already points to the correct target (idempotent)
+- Create or update DNS records (CNAME for subdomains, ALIAS for root domains)
+- Verify DNS configuration
+- Test HTTPS endpoint
+
+**Note**: The script is fully idempotent - running it multiple times with the same configuration will not create duplicate DNS records or cause errors.
+
+#### Option 2: Manual Configuration (Any DNS Provider)
+
+For domains hosted with GoDaddy, Namecheap, Cloudflare, etc.:
+
+```bash
+# In config.env
+CUSTOM_DOMAIN="api.example.com"
+AUTO_CONFIGURE_DNS="false"  # or leave empty
+
+# Run setup
+./setup-eb-environment.sh
+```
+
+The script will display DNS configuration instructions like:
+
+```
+For Subdomain (api.example.com, www.example.com):
+  Record Type: CNAME
+  Name:        api
+  Target:      my-env-123.us-east-1.elasticbeanstalk.com
+  TTL:         300
+
+For Root Domain (example.com):
+  Record Type: ALIAS (if supported) or A record
+  Name:        @ (or leave blank)
+  Target:      my-env-123.us-east-1.elasticbeanstalk.com
+  TTL:         300
+```
+
+### Supported Domain Types
+
+#### Subdomains
+- **Examples**: `api.example.com`, `www.example.com`, `app.example.com`
+- **DNS Record**: CNAME
+- **Works with**: All DNS providers
+- **Propagation**: Usually 5-30 minutes
+
+#### Root Domains
+- **Examples**: `example.com`, `yourdomain.com`
+- **DNS Record**: ALIAS (Route 53) or A record (with IP lookup)
+- **Works with**: 
+  - Route 53 (recommended, supports ALIAS)
+  - Cloudflare (supports CNAME flattening)
+  - Some other providers (check if they support ALIAS)
+- **Propagation**: Usually 5-30 minutes, can take up to 48 hours
+
+**Note**: Some DNS providers don't support ALIAS records for root domains. In such cases:
+- Use a subdomain instead (e.g., `www.example.com`)
+- Migrate DNS to Route 53
+- Use your provider's alternative (Cloudflare has "CNAME flattening")
+
+### Route 53 DNS Management Script
+
+A standalone utility for managing Route 53 DNS records:
+
+```bash
+# List all hosted zones
+./scripts/setup-route53-dns.sh list-zones
+
+# Find hosted zone for a domain
+./scripts/setup-route53-dns.sh find-zone example.com
+
+# Create hosted zone
+./scripts/setup-route53-dns.sh create-zone example.com
+
+# List DNS records in a zone
+./scripts/setup-route53-dns.sh list-records Z1234567890ABC
+
+# Create CNAME record (for subdomains)
+./scripts/setup-route53-dns.sh create-cname Z1234567890ABC api.example.com my-lb.elb.amazonaws.com
+
+# Create ALIAS record (for root domains)
+./scripts/setup-route53-dns.sh create-alias Z1234567890ABC example.com my-lb.elb.amazonaws.com Z35SXDOTRQ7X7K
+
+# Delete DNS record
+./scripts/setup-route53-dns.sh delete-record Z1234567890ABC api.example.com CNAME
+
+# Wait for DNS propagation
+./scripts/setup-route53-dns.sh wait api.example.com 300
+
+# Show help
+./scripts/setup-route53-dns.sh help
+```
+
+### Adding Multiple Domains
+
+You can point multiple domains to the same environment:
+
+#### Using Route 53 Script:
+
+```bash
+# Get your environment's load balancer DNS
+ENV_URL=$(aws elasticbeanstalk describe-environments \
+  --application-name my-app \
+  --environment-names my-env \
+  --query "Environments[0].CNAME" \
+  --output text)
+
+# Get your hosted zone ID
+ZONE_ID=$(./scripts/setup-route53-dns.sh find-zone example.com)
+
+# Add multiple subdomains
+./scripts/setup-route53-dns.sh create-cname $ZONE_ID api.example.com $ENV_URL
+./scripts/setup-route53-dns.sh create-cname $ZONE_ID www.example.com $ENV_URL
+./scripts/setup-route53-dns.sh create-cname $ZONE_ID app.example.com $ENV_URL
+```
+
+#### Manually:
+
+Just add multiple CNAME records in your DNS provider, all pointing to your environment's URL.
+
+### SSL Certificate Considerations
+
+**Important**: Your SSL certificate must include all domains you want to use:
+
+```bash
+# Request certificate with multiple domains
+aws acm request-certificate \
+  --domain-name example.com \
+  --subject-alternative-names "*.example.com" "api.example.com" "www.example.com" \
+  --validation-method DNS \
+  --region us-east-1
+```
+
+- Use a wildcard certificate (`*.example.com`) to cover all subdomains
+- Or explicitly list all domains/subdomains in the certificate
+- Without proper SSL coverage, HTTPS won't work for that domain
+
+### Verifying Domain Configuration
+
+#### Check DNS Resolution:
+
+```bash
+# Using dig
+dig api.example.com +short
+
+# Using nslookup
+nslookup api.example.com
+
+# Using host
+host api.example.com
+```
+
+#### Test HTTPS Endpoint:
+
+```bash
+# Test with curl
+curl -I https://api.example.com
+
+# Test with browser
+# Simply visit https://api.example.com
+```
+
+### Troubleshooting Custom Domains
+
+#### Domain not resolving:
+- **Wait for DNS propagation** (5-30 minutes typically, up to 48 hours)
+- **Check DNS records** are correct in your provider
+- **Verify nameservers** if using Route 53 (update at domain registrar)
+- **Try flushing DNS cache**: `sudo systemd-resolve --flush-caches` (Linux)
+
+#### HTTPS not working:
+- **Certificate doesn't include domain**: Request new certificate with this domain
+- **DNS not propagated yet**: Wait longer
+- **Application not deployed**: Deploy your application first
+- **Environment not healthy**: Check environment health in AWS console
+
+#### Root domain not working:
+- **Provider doesn't support ALIAS**: Use subdomain or migrate to Route 53
+- **Need to use A record**: Some providers require you to resolve the LB IP (not recommended, IPs can change)
+- **Alternative solutions**: Use Cloudflare (supports CNAME flattening)
+
+### Example: Complete Custom Domain Setup
+
+```bash
+# 1. Configure in config.env
+cat >> config.env <<EOF
+CUSTOM_DOMAIN="api.mycompany.com"
+AUTO_CONFIGURE_DNS="true"
+EOF
+
+# 2. Ensure SSL certificate includes the domain
+aws acm request-certificate \
+  --domain-name "*.mycompany.com" \
+  --validation-method DNS \
+  --region us-east-1
+
+# 3. Run setup
+./setup-eb-environment.sh
+
+# 4. Verify DNS
+dig api.mycompany.com +short
+
+# 5. Test HTTPS
+curl -I https://api.mycompany.com
+
+# 6. Deploy your application
+cd /path/to/your/app
+eb deploy
 ```
 
 ## Deployment

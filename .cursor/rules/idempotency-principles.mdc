@@ -1,0 +1,149 @@
+---
+alwaysApply: true
+description: Core idempotency principles that ALL scripts in this project must follow
+---
+
+# Idempotency Principles - CRITICAL
+
+This project follows **strict idempotency principles**. ALL scripts must be safe to run multiple times without creating errors or duplicate resources.
+
+## The Golden Rule
+
+**ALWAYS check current state before making changes. Never assume resources don't exist.**
+
+## Required Pattern: Check → Compare → Skip/Update
+
+Every script that creates or modifies AWS resources MUST follow this pattern:
+
+### 1. Check Current State
+Query AWS to determine if the resource already exists.
+
+### 2. Compare with Desired State
+If resource exists, compare its current configuration with the desired configuration.
+
+### 3. Take Action Based on Comparison
+- **If matches**: Skip creation, log that resource is already correct
+- **If different**: Update resource, log what changed
+- **If not exists**: Create resource, log creation
+
+### 4. Log All Actions
+Clearly communicate to the user what action was taken or skipped.
+
+## Examples from This Project
+
+### S3 Buckets
+See [scripts/setup-s3-buckets.sh](mdc:scripts/setup-s3-buckets.sh)
+```bash
+# Check if bucket exists
+if aws s3api head-bucket --bucket "$bucket_name" 2>/dev/null; then
+    log_info "Bucket $bucket_name already exists"
+    # Still check/update configuration if needed
+else
+    log_info "Creating bucket: $bucket_name"
+    aws s3api create-bucket --bucket "$bucket_name"
+fi
+```
+
+### IAM Roles
+See [scripts/setup-iam-roles.sh](mdc:scripts/setup-iam-roles.sh)
+```bash
+# Check if role exists
+if aws iam get-role --role-name "$role_name" 2>/dev/null; then
+    log_info "Role $role_name already exists"
+    # Compare policy documents
+    # Update only if different
+else
+    log_info "Creating role: $role_name"
+    aws iam create-role --role-name "$role_name"
+fi
+```
+
+### EB Environment
+See [scripts/create-eb-environment.sh](mdc:scripts/create-eb-environment.sh)
+```bash
+# Check if environment exists
+if aws elasticbeanstalk describe-environments \
+    --environment-names "$env_name" | grep -q "$env_name"; then
+    log_warn "Environment $env_name already exists"
+    # Compare configuration and prompt before updating
+    update_environment_configuration "$env_name"
+else
+    log_info "Creating environment: $env_name"
+    aws elasticbeanstalk create-environment
+fi
+```
+
+### Custom Domain (Route 53)
+See [scripts/configure-custom-domain.sh](mdc:scripts/configure-custom-domain.sh)
+```bash
+# Check existing DNS record
+local record_status=$(check_existing_dns_record "$zone_id" "$domain" "$type" "$target")
+
+if [[ $record_status == "MATCHES" ]]; then
+    log_info "DNS record already exists and is correctly configured"
+    log_info "Skipping DNS record creation"
+    return 0
+elif [[ $record_status == DIFFERENT:* ]]; then
+    log_warn "DNS record exists but points to different target"
+    log_info "Updating DNS record..."
+    # Use UPSERT action
+else
+    log_info "Creating new DNS record"
+    # Use UPSERT action
+fi
+```
+
+## What NOT to Do
+
+❌ **NEVER** assume a resource doesn't exist and blindly try to create it
+❌ **NEVER** use create commands without checking first
+❌ **NEVER** create duplicate resources
+❌ **NEVER** fail with errors when resource already exists
+
+## What TO Do
+
+✅ **ALWAYS** check if resource exists before creating
+✅ **ALWAYS** compare current vs desired state
+✅ **ALWAYS** skip operations when state is already correct
+✅ **ALWAYS** log what action was taken or skipped
+✅ **ALWAYS** handle both "exists" and "doesn't exist" cases gracefully
+✅ **ALWAYS** use appropriate AWS API flags:
+   - Route 53: Use `UPSERT` action (after checking)
+   - Other services: Check first, then create/update
+
+## Benefits
+
+1. **Safe Re-runs**: Scripts can be re-run to fix failures
+2. **Configuration Updates**: Change config.env and re-run to apply
+3. **No Manual Cleanup**: Existing resources are preserved
+4. **Efficient**: Skip unnecessary API calls
+5. **Production Ready**: Safe for automation and CI/CD
+
+## Testing Idempotency
+
+Every new feature MUST be tested by running the setup script multiple times:
+
+```bash
+# Run 1 - Should create resources
+./setup-eb-environment.sh
+
+# Run 2 - Should skip existing resources (no errors!)
+./setup-eb-environment.sh
+
+# Run 3 - Should still skip (fully idempotent)
+./setup-eb-environment.sh
+```
+
+All three runs should succeed with appropriate "already exists" or "skipping" messages.
+
+## Documentation Requirements
+
+When adding idempotent features, update:
+1. [README.md](mdc:README.md) - Idempotency section
+2. Feature-specific documentation
+3. Code comments explaining the check logic
+
+## Reference
+
+See [README.md](mdc:README.md) section "Idempotency" for complete project-level documentation.
+See [IDEMPOTENCY_VERIFICATION.md](mdc:IDEMPOTENCY_VERIFICATION.md) for verification examples.

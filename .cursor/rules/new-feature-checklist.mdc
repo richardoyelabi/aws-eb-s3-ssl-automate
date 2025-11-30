@@ -1,0 +1,168 @@
+---
+alwaysApply: false
+description: Checklist for adding new features to this AWS automation project
+---
+
+# New Feature Implementation Checklist
+
+When adding ANY new feature to this project, you MUST complete this checklist.
+
+## 1. Idempotency (CRITICAL - Non-negotiable)
+
+- [ ] Script checks if resource/configuration already exists
+- [ ] Script compares current state with desired state
+- [ ] Script skips operations when state is already correct
+- [ ] Script updates only when necessary
+- [ ] Script never creates duplicate resources
+- [ ] Tested by running setup script 3+ times consecutively
+- [ ] All runs succeed without errors
+- [ ] See [.cursor/rules/idempotency-principles.mdc](mdc:.cursor/rules/idempotency-principles.mdc)
+
+## 2. Script Structure
+
+- [ ] Starts with proper shebang: `#!/bin/bash`
+- [ ] Has `set -e` for error handling
+- [ ] Defines color-coded logging functions (log_info, log_warn, log_error)
+- [ ] Uses consistent function naming (verb_noun_object)
+- [ ] Has main() function at bottom
+- [ ] Can be sourced or executed directly
+- [ ] See [.cursor/rules/bash-script-patterns.mdc](mdc:.cursor/rules/bash-script-patterns.mdc)
+
+## 3. Configuration
+
+- [ ] New config variables added to [config.env.example](mdc:config.env.example)
+- [ ] Variables have clear comments explaining their purpose
+- [ ] Variables have example values
+- [ ] Default values are sensible
+- [ ] Variables are validated in script
+
+## 4. Integration
+
+- [ ] New script integrated into [setup-eb-environment.sh](mdc:setup-eb-environment.sh)
+- [ ] Function added to main setup flow
+- [ ] Temp files added to cleanup_temp_files()
+- [ ] Error handling integrates with main script
+- [ ] Script can run independently if needed
+
+## 5. Testing
+
+- [ ] Created test script in tests/ directory
+- [ ] Test script validates functionality
+- [ ] Test script checks idempotency
+- [ ] Test script validates configuration variables
+- [ ] Test script checks integration with main script
+- [ ] All tests pass (100% pass rate expected)
+- [ ] Tested with and without AWS credentials
+
+## 6. Documentation (Critical)
+
+### README.md Updates
+- [ ] Feature added to Features section
+- [ ] Configuration example added to Quick Start
+- [ ] Added to Project Structure section
+- [ ] Added to Idempotency section (if creates/modifies resources)
+- [ ] Added to Configuration Options (if has config vars)
+- [ ] Troubleshooting section updated
+- [ ] Examples provided
+
+### Feature-Specific Documentation
+- [ ] Created dedicated guide (e.g., FEATURE_NAME_SETUP.md)
+- [ ] Quick start examples
+- [ ] Detailed configuration options
+- [ ] Troubleshooting section
+- [ ] Best practices
+- [ ] Idempotency behavior documented
+
+### Deployment Instructions
+- [ ] Updated [scripts/generate-deployment-instructions.sh](mdc:scripts/generate-deployment-instructions.sh)
+- [ ] Instructions show feature status
+- [ ] Examples of using the feature
+- [ ] Links to detailed documentation
+
+### Changelog
+- [ ] Created CHANGELOG_FEATURE_NAME.md
+- [ ] Lists all files added/modified
+- [ ] Documents new functionality
+- [ ] Provides usage examples
+- [ ] Lists benefits
+
+## 7. Code Quality
+
+- [ ] Code is readable and maintainable
+- [ ] Functions are single-purpose
+- [ ] Complex logic has comments
+- [ ] No hardcoded values (use config variables)
+- [ ] Error messages are clear and actionable
+- [ ] Success messages are informative
+- [ ] Follows project's bash patterns
+
+## 8. Logging
+
+- [ ] Uses log_info for normal operations
+- [ ] Uses log_warn for warnings (not errors)
+- [ ] Uses log_error for actual errors
+- [ ] Logs when skipping operations (idempotency)
+- [ ] Logs when updating existing resources
+- [ ] Logs when creating new resources
+- [ ] Progress messages for long operations
+
+## 9. User Experience
+
+- [ ] Clear instructions for users
+- [ ] Helpful error messages with solutions
+- [ ] Progress indicators for long operations
+- [ ] Confirmation prompts for destructive operations
+- [ ] Non-interactive by default (can run in CI/CD)
+- [ ] Exit codes appropriate (0 = success, 1 = error)
+
+## 10. Edge Cases
+
+- [ ] Handles missing AWS credentials gracefully
+- [ ] Handles missing config variables
+- [ ] Handles AWS API rate limits
+- [ ] Handles network timeouts
+- [ ] Handles partially created resources
+- [ ] Handles cleanup on failure
+
+## 11. Security
+
+- [ ] No credentials in code
+- [ ] Uses AWS profiles correctly
+- [ ] Temporary files cleaned up
+- [ ] Follows least privilege principle
+- [ ] Sensitive data not logged
+
+## 12. Dependencies
+
+- [ ] No new dependencies added (if possible)
+- [ ] If dependencies added, documented in README
+- [ ] Dependencies checked in prerequisite section
+- [ ] Works with existing tool versions
+
+## Example Perfect Implementation
+
+The custom domain feature is a perfect example:
+- [scripts/configure-custom-domain.sh](mdc:scripts/configure-custom-domain.sh) - Main script
+- [scripts/setup-route53-dns.sh](mdc:scripts/setup-route53-dns.sh) - Utility script
+- [tests/test-custom-domain.sh](mdc:tests/test-custom-domain.sh) - Test suite
+- [CUSTOM_DOMAIN_SETUP.md](mdc:CUSTOM_DOMAIN_SETUP.md) - Detailed guide
+- [QUICK_REFERENCE_CUSTOM_DOMAIN.md](mdc:QUICK_REFERENCE_CUSTOM_DOMAIN.md) - Quick ref
+- [CHANGELOG_CUSTOM_DOMAIN.md](mdc:CHANGELOG_CUSTOM_DOMAIN.md) - Changelog
+- [IDEMPOTENCY_VERIFICATION.md](mdc:IDEMPOTENCY_VERIFICATION.md) - Idempotency proof
+
+Review these files as reference for proper implementation.
+
+## Before Submitting
+
+- [ ] All items on this checklist completed
+- [ ] Tests pass (run ./tests/test-FEATURE.sh)
+- [ ] Script runs successfully 3+ times in a row
+- [ ] Documentation is complete and accurate
+- [ ] Code follows project conventions
+- [ ] Idempotency verified and documented
+
+## Remember
+
+**Idempotency is not optional. It's the core principle of this project.**
+
+If a script isn't idempotent, it's not production-ready.

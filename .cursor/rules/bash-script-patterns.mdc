@@ -1,0 +1,254 @@
+---
+globs: *.sh
+description: Required patterns and conventions for bash scripts in this project
+---
+
+# Bash Script Patterns and Conventions
+
+All bash scripts in this project must follow these patterns.
+
+## Script Header (Required)
+
+```bash
+#!/bin/bash
+
+# [Script Name] Module
+# [Brief description of what this script does]
+
+set -e
+
+# Color codes for output
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+CYAN="\033[0;36m"
+NC="\033[0m" # No Color
+```
+
+## Logging Functions (Required)
+
+Every script must define these standard logging functions:
+
+```bash
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1" >&2
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+```
+
+## Idempotency Pattern (CRITICAL)
+
+See [.cursor/rules/idempotency-principles.mdc](mdc:.cursor/rules/idempotency-principles.mdc)
+
+**EVERY function that creates/modifies AWS resources MUST:**
+
+1. Check if resource exists
+2. Compare current vs desired state
+3. Skip if correct, update if different, create if missing
+4. Log the action taken
+
+### Template for Resource Creation
+
+```bash
+create_or_update_resource() {
+    local resource_name=$1
+    local desired_config=$2
+    
+    log_info "Checking if $resource_name exists..."
+    
+    # Check if resource exists
+    local existing=$(aws service describe-resource \
+        --resource-name "$resource_name" \
+        --query "Resource" \
+        --output json 2>/dev/null || echo "")
+    
+    if [ -n "$existing" ] && [ "$existing" != "[]" ]; then
+        # Resource exists - compare configuration
+        local current_config=$(extract_current_config "$existing")
+        
+        if [ "$current_config" = "$desired_config" ]; then
+            log_info "Resource $resource_name already exists and is correctly configured"
+            log_info "Skipping resource creation"
+            return 0
+        else
+            log_warn "Resource $resource_name exists but configuration differs"
+            log_info "Current: $current_config"
+            log_info "Desired: $desired_config"
+            log_info "Updating resource..."
+            # Update logic here
+        fi
+    else
+        log_info "Creating resource: $resource_name"
+        # Create logic here
+    fi
+    
+    log_info "Resource operation completed successfully"
+}
+```
+
+## Error Handling
+
+```bash
+# At start of script
+set -e  # Exit on error
+
+# For commands that may fail but shouldn't stop script
+if ! some_command 2>/dev/null; then
+    log_warn "Command failed but continuing..."
+fi
+
+# For critical operations
+if ! critical_command; then
+    log_error "Critical operation failed"
+    exit 1
+fi
+```
+
+## AWS CLI Patterns
+
+### Querying Resources
+
+```bash
+# Check if resource exists
+aws service describe-resource \
+    --profile "$AWS_PROFILE" \
+    --region "$AWS_REGION" \
+    --query "ResourceList[?Name=='$resource_name']" \
+    --output json 2>/dev/null
+```
+
+### Safe Resource Creation
+
+```bash
+# WRONG - assumes resource doesn't exist
+aws service create-resource --name "$name"
+
+# RIGHT - checks first
+if ! aws service describe-resource --name "$name" 2>/dev/null; then
+    aws service create-resource --name "$name"
+else
+    log_info "Resource $name already exists"
+fi
+```
+
+## Temporary Files
+
+Always clean up temporary files:
+
+```bash
+# Create temp file
+cat > /tmp/my-config.json <<EOF
+{
+  "key": "value"
+}
+EOF
+
+# Use temp file
+aws service update --config file:///tmp/my-config.json
+
+# Clean up
+rm -f /tmp/my-config.json
+```
+
+Add cleanup to main cleanup function in [setup-eb-environment.sh](mdc:setup-eb-environment.sh).
+
+## Function Naming
+
+- Use descriptive snake_case names
+- Start with verb: `create_`, `update_`, `check_`, `get_`, `configure_`
+- Examples:
+  - `create_s3_bucket`
+  - `check_existing_record`
+  - `get_environment_url`
+  - `configure_https_listener`
+
+## Variable Naming
+
+```bash
+# Local function variables
+local resource_name=$1
+local config_value=$2
+
+# Environment variables (from config.env)
+AWS_REGION
+APP_NAME
+CUSTOM_DOMAIN
+
+# Script-level variables
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+```
+
+## Return Values
+
+```bash
+# Success
+return 0
+
+# Failure
+return 1
+
+# Echo values to return strings
+get_resource_id() {
+    local id=$(aws service describe --query "Id" --output text)
+    echo "$id"
+}
+
+# Use returned value
+resource_id=$(get_resource_id "$name")
+```
+
+## Documentation
+
+Every function should have a comment explaining:
+- What it does
+- Parameters it accepts
+- What it returns
+- Whether it's idempotent (MUST be!)
+
+```bash
+# Creates or updates Route 53 DNS record
+# Idempotent: Checks if record exists and is correct before creating/updating
+# Parameters:
+#   $1 - hosted_zone_id
+#   $2 - domain name
+#   $3 - target DNS
+# Returns: 0 on success, 1 on failure
+create_dns_record() {
+    # Implementation
+}
+```
+
+## Testing Pattern
+
+Scripts should be testable:
+
+```bash
+# Main function that can be tested
+main() {
+    log_info "Starting operation..."
+    # Main logic
+}
+
+# Only run main if executed directly (not sourced)
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi
+```
+
+This allows sourcing the script in tests.
+
+## Examples
+
+See these reference implementations:
+- [scripts/setup-s3-buckets.sh](mdc:scripts/setup-s3-buckets.sh) - S3 bucket idempotency
+- [scripts/setup-iam-roles.sh](mdc:scripts/setup-iam-roles.sh) - IAM role comparison
+- [scripts/create-eb-environment.sh](mdc:scripts/create-eb-environment.sh) - Configuration comparison
+- [scripts/configure-custom-domain.sh](mdc:scripts/configure-custom-domain.sh) - DNS record checking
+- [scripts/setup-route53-dns.sh](mdc:scripts/setup-route53-dns.sh) - Standalone utility with idempotency
