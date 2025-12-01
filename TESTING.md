@@ -37,6 +37,36 @@ tests/
 ./tests/run-tests.sh e2e
 ```
 
+## Prerequisites
+
+### Git Submodules Setup
+
+The testing framework uses git submodules that must be initialized:
+
+```bash
+# After cloning the repository
+git submodule update --init --recursive
+
+# Verify submodules are loaded
+ls -la tests/
+# Should show: bats/ bats-support/ bats-assert/ directories
+```
+
+**What are the submodules?**
+- `tests/bats/` - Core bats testing framework
+- `tests/bats-support/` - Additional testing utilities
+- `tests/bats-assert/` - Assertion library for tests
+
+**Troubleshooting:**
+If tests fail with "command not found" errors, the submodules aren't initialized:
+```bash
+# Re-initialize submodules
+git submodule update --init --recursive
+
+# Or force update if needed
+git submodule update --remote --recursive
+```
+
 ## Writing Tests
 
 ### Test File Structure
@@ -284,6 +314,11 @@ mock_aws() {
 ### GitHub Actions Example
 
 ```yaml
+- name: Checkout code with submodules
+  uses: actions/checkout@v3
+  with:
+    submodules: recursive
+
 - name: Run unit tests
   run: ./tests/run-tests.sh unit
 
@@ -294,6 +329,8 @@ mock_aws() {
   if: github.ref == 'refs/heads/main'
   run: ./tests/run-tests.sh e2e
 ```
+
+**Note:** The `submodules: recursive` option ensures git submodules are initialized before running tests.
 
 ## Troubleshooting
 

@@ -19,6 +19,9 @@ Before contributing, ensure you have:
 git clone <repository-url>
 cd aws-eb-s3-ssl-automate
 
+# Initialize git submodules (required for testing framework)
+git submodule update --init --recursive
+
 # Copy configuration template
 cp config.env.example config.env
 # Edit config.env with your test values

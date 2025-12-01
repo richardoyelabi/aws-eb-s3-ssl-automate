@@ -88,6 +88,16 @@ Run during development to verify functionality:
 
 - **ACM Certificate**: SSL certificate for your domain (will be validated during setup)
 
+### Git Submodules
+
+This project uses git submodules for the testing framework. After cloning:
+
+```bash
+git submodule update --init --recursive
+```
+
+**Note**: Required for running tests. See [TESTING.md](TESTING.md) for details.
+
 ### AWS Credentials Configuration
 
 Configure your AWS credentials before running the script:
@@ -109,6 +119,9 @@ aws configure --profile myprofile
 ```bash
 git clone <repository-url>
 cd aws-eb-s3-ssl-automate
+
+# Initialize git submodules (required for testing framework)
+git submodule update --init --recursive
 ```
 
 ### 2. Configure
@@ -429,7 +442,7 @@ The scripts will **never** create duplicate resources:
 │   ├── config.sh                   # Configuration file validation
 │   └── environment.sh              # Existing resources check
 ├── tests/                          # Code testing
-│   ├── bats/                       # bats-core testing framework
+│   ├── bats/                       # bats-core testing framework (submodule)
 │   ├── test_helper.bash            # Shared test utilities
 │   ├── aws-mock.bash               # AWS API mocking
 │   ├── run-tests.sh                # Test runner
