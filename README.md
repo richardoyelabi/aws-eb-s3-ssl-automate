@@ -14,6 +14,38 @@ A shell script automation tool that sets up a complete AWS Elastic Beanstalk env
 - **Environment Variables**: Automatically configures environment variables for S3 bucket access
 - **Deployment Instructions**: Generates customized deployment instructions for your application
 
+## Validation vs Testing
+
+This project distinguishes between **validation** and **testing**:
+
+### Validation (Pre-deployment)
+Run before deployment to ensure your environment is ready:
+```bash
+./validate/run-validation.sh
+```
+- ✅ Checks prerequisites (AWS CLI, credentials, permissions)
+- ✅ Validates configuration files and variables
+- ✅ Verifies environment readiness
+- **Purpose**: "Can we deploy?"
+
+### Testing (Code Quality)
+Run during development to verify functionality:
+```bash
+./tests/run-tests.sh unit
+```
+- ✅ Tests code logic and behavior
+- ✅ Validates business rules
+- ✅ Checks integration between components
+- **Purpose**: "Does the code work correctly?"
+
+## Documentation
+
+- **[VALIDATION.md](VALIDATION.md)** - Pre-deployment validation guide
+- **[TESTING.md](TESTING.md)** - Testing framework and writing tests
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines and development workflow
+- **[CUSTOM_DOMAIN_SETUP.md](CUSTOM_DOMAIN_SETUP.md)** - Custom domain configuration
+- **[IDEMPOTENCY_VERIFICATION.md](IDEMPOTENCY_VERIFICATION.md)** - Idempotency verification examples
+
 ## Prerequisites
 
 ### Required Tools
@@ -117,17 +149,34 @@ MIN_INSTANCES="1"
 MAX_INSTANCES="4"
 ```
 
-### 3. Validate Configuration
+### 3. Validate Prerequisites
 
-Run the validation script to check prerequisites and configuration:
+Run the validation script to check prerequisites, permissions, and configuration before deployment:
 
 ```bash
-chmod +x tests/test-setup.sh
-./tests/test-setup.sh
+./validate/run-validation.sh
+```
 
-# Optional: Test custom domain functionality
-chmod +x tests/test-custom-domain.sh
-./tests/test-custom-domain.sh
+**What this checks:**
+- ✅ AWS CLI installation and version
+- ✅ AWS credentials and permissions
+- ✅ Required IAM permissions for EB, S3, ACM
+- ✅ Configuration file variables
+- ✅ S3 bucket name validity
+- ✅ Existing AWS resources
+
+**Note:** This validation ensures your environment is ready for deployment. It is separate from code testing.
+
+### 4. Optional: Run Code Tests
+
+For developers: Run unit and integration tests to verify code functionality:
+
+```bash
+# Run unit tests (no AWS required)
+./tests/run-tests.sh unit
+
+# Run integration tests
+./tests/run-tests.sh integration
 ```
 
 ### 4. Request SSL Certificate (if needed)
@@ -358,6 +407,12 @@ The scripts will **never** create duplicate resources:
 ├── config.env.example               # Configuration template
 ├── config.env                       # Your configuration (gitignored)
 ├── README.md                        # This file
+├── VALIDATION.md                    # Pre-deployment validation guide
+├── TESTING.md                       # Testing framework guide
+├── CONTRIBUTING.md                  # Contribution guidelines
+├── CUSTOM_DOMAIN_SETUP.md           # Custom domain configuration guide
+├── QUICK_REFERENCE_CUSTOM_DOMAIN.md # Custom domain quick reference
+├── IDEMPOTENCY_VERIFICATION.md      # Idempotency verification examples
 ├── scripts/
 │   ├── setup-s3-buckets.sh         # S3 bucket creation and configuration
 │   ├── setup-ssl-certificate.sh    # ACM certificate validation
@@ -367,9 +422,22 @@ The scripts will **never** create duplicate resources:
 │   ├── configure-custom-domain.sh  # Custom domain configuration
 │   ├── setup-route53-dns.sh        # Route 53 DNS management utility
 │   └── generate-deployment-instructions.sh  # Deployment guide generator
-├── tests/
-│   ├── test-setup.sh               # Validation and testing script
-│   └── test-custom-domain.sh       # Custom domain functionality tests
+├── validate/                        # Pre-deployment validation
+│   ├── run-validation.sh           # Main validation orchestrator
+│   ├── prerequisites.sh            # AWS CLI, tools, credentials
+│   ├── permissions.sh              # IAM permissions validation
+│   ├── config.sh                   # Configuration file validation
+│   └── environment.sh              # Existing resources check
+├── tests/                          # Code testing
+│   ├── bats/                       # bats-core testing framework
+│   ├── test_helper.bash            # Shared test utilities
+│   ├── aws-mock.bash               # AWS API mocking
+│   ├── run-tests.sh                # Test runner
+│   ├── unit/                       # Unit tests
+│   ├── integration/                # Integration tests
+│   ├── e2e/                        # End-to-end tests
+│   ├── test-setup.sh               # Legacy validation (deprecated)
+│   └── test-custom-domain.sh       # Legacy custom domain tests
 └── templates/
     └── eb-options.json             # EB option settings template
 ```
