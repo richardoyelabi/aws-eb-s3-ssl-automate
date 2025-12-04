@@ -247,8 +247,11 @@ create_instance_profile() {
                 --role-name "$role_name" \
                 --profile "$AWS_PROFILE" 2>/dev/null || log_warn "Role may already be attached or attachment failed"
             
-            log_info "Waiting for IAM changes to propagate..."
-            sleep 10
+            # Wait for IAM propagation (skip in test mode)
+            if [ "$TEST_MODE" != "true" ]; then
+                log_info "Waiting for IAM changes to propagate..."
+                sleep 10
+            fi
         else
             log_info "Role $role_name is already attached to profile"
         fi
@@ -268,9 +271,11 @@ create_instance_profile() {
         --role-name "$role_name" \
         --profile "$AWS_PROFILE"
 
-    # Wait a bit for IAM to propagate
-    log_info "Waiting for IAM changes to propagate..."
-    sleep 10
+    # Wait a bit for IAM to propagate (skip in test mode)
+    if [ "$TEST_MODE" != "true" ]; then
+        log_info "Waiting for IAM changes to propagate..."
+        sleep 10
+    fi
 
     export EB_INSTANCE_PROFILE="$profile_name"
     echo "$profile_name" > /tmp/eb-instance-profile.txt

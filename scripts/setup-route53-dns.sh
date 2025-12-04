@@ -282,6 +282,12 @@ wait_for_dns_propagation() {
     local max_wait=${2:-300}
     local sleep_interval=10
     
+    # Skip wait loop in test mode
+    if [ "$TEST_MODE" = "true" ]; then
+        log_info "Skipping DNS propagation wait in test mode"
+        return 0
+    fi
+    
     log_info "Waiting for DNS propagation for: $domain"
     log_info "This may take a few minutes..."
     

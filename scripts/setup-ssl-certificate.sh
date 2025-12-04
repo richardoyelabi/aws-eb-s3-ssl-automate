@@ -105,6 +105,12 @@ wait_for_certificate_validation() {
     local max_attempts=${3:-60}  # Default 60 attempts = 30 minutes
     local wait_interval=30  # 30 seconds between checks
     
+    # Skip wait loop in test mode
+    if [ "$TEST_MODE" = "true" ]; then
+        log_info "Skipping certificate validation wait in test mode"
+        return 0
+    fi
+    
     log_info "Polling for certificate validation..."
     log_info "This may take 5-30 minutes. Checking every $wait_interval seconds..."
     echo ""
@@ -152,6 +158,12 @@ validate_certificate() {
         
         # Display DNS validation records
         display_dns_validation_records "$cert_arn" "$region"
+        
+        # Skip interactive prompt in test mode
+        if [ "$TEST_MODE" = "true" ]; then
+            log_info "Skipping interactive prompt in test mode"
+            return 1
+        fi
         
         echo ""
         echo "What would you like to do?"

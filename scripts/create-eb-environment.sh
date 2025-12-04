@@ -207,6 +207,13 @@ update_environment_configuration() {
     done
     echo ""
     log_warn "Updating the environment may cause brief downtime or service interruption."
+    
+    # Skip prompt in test mode
+    if [ "$TEST_MODE" = "true" ]; then
+        log_info "Skipping environment update"
+        return 0
+    fi
+    
     read -p "Do you want to update the environment? (yes/no): " -r
     echo ""
     
@@ -225,8 +232,11 @@ update_environment_configuration() {
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION"
     
-    log_info "Waiting for environment update to complete..."
-    sleep 30
+    # Wait for environment update (skip in test mode)
+    if [ "$TEST_MODE" != "true" ]; then
+        log_info "Waiting for environment update to complete..."
+        sleep 30
+    fi
     
     rm -f /tmp/eb-options.json
     log_info "Environment configuration updated successfully"
@@ -267,6 +277,13 @@ create_environment() {
         --region "$AWS_REGION"
 
     log_info "Environment creation initiated. This may take 5-10 minutes..."
+    
+    # Skip wait loop in test mode
+    if [ "$TEST_MODE" = "true" ]; then
+        log_info "Skipping wait loop in test mode"
+        rm -f /tmp/eb-options.json
+        return 0
+    fi
     
     # Wait for environment to be ready with extended timeout
     log_info "Waiting for environment to become ready..."

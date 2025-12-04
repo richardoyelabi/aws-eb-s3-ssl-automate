@@ -545,9 +545,11 @@ main() {
         if configure_domain_with_route53 "$CUSTOM_DOMAIN" "$lb_dns" "$lb_zone_id"; then
             log_info "Route 53 DNS record created successfully!"
             
-            # Wait a moment for DNS to propagate
-            log_info "Waiting 10 seconds for DNS propagation..."
-            sleep 10
+            # Wait a moment for DNS to propagate (skip in test mode)
+            if [ "$TEST_MODE" != "true" ]; then
+                log_info "Waiting 10 seconds for DNS propagation..."
+                sleep 10
+            fi
             
             # Verify configuration
             verify_domain_configuration "$CUSTOM_DOMAIN" "$lb_dns"

@@ -190,8 +190,10 @@ verify_ssl_configuration() {
 
     log_info "Verifying SSL configuration..."
     
-    # Wait a moment for changes to propagate
-    sleep 5
+    # Wait a moment for changes to propagate (skip in test mode)
+    if [ "$TEST_MODE" != "true" ]; then
+        sleep 5
+    fi
 
     # Try to check if HTTPS is responding
     if command -v curl &> /dev/null; then
@@ -235,9 +237,11 @@ main() {
     # Configure HTTPS listener (will add certificate if provided, or enable HTTPS with AWS auto certs)
     configure_https_listener "$APP_NAME" "$ENV_NAME" "$cert_arn"
 
-    # Wait for update to complete
-    log_info "Waiting for environment update to complete..."
-    sleep 30
+    # Wait for update to complete (skip in test mode)
+    if [ "$TEST_MODE" != "true" ]; then
+        log_info "Waiting for environment update to complete..."
+        sleep 30
+    fi
 
     # Configure HTTP redirect
     configure_http_redirect "$APP_NAME" "$ENV_NAME"
