@@ -75,21 +75,21 @@ teardown() {
 }
 
 @test "detect_dns_provider detects GoDaddy" {
-    # Skip since we can't easily mock dig in subshell
-    skip "DNS provider detection requires real dig command"
+    run detect_dns_provider "godaddy.com"
+    [ "$status" -eq 0 ]
+    [ "$output" = "GoDaddy" ]
 }
 
 @test "detect_dns_provider detects Route 53" {
-    # Skip since we can't easily mock dig in subshell
-    skip "DNS provider detection requires real dig command"
+    run detect_dns_provider "example.com"
+    [ "$status" -eq 0 ]
+    [ "$output" = "Route 53" ]
 }
 
 @test "detect_dns_provider returns Unknown when dig unavailable" {
-    # Temporarily make dig unavailable
-    local original_path="$PATH"
-    export PATH=""
+    set_mock_dig_available "false"
     run detect_dns_provider "example.com"
-    export PATH="$original_path"
+    set_mock_dig_available "true"
     [ "$status" -eq 0 ]
     [ "$output" = "Unknown" ]
 }
@@ -133,43 +133,27 @@ teardown() {
 }
 
 @test "verify_domain_configuration verifies DNS resolution" {
-    if ! command -v dig &> /dev/null; then
-        skip "dig not available"
-    fi
-    # Mock dig to return a value
-    dig() {
-        echo "test-lb.us-east-1.elb.amazonaws.com"
-    }
     run verify_domain_configuration "example.com" "test-lb.us-east-1.elb.amazonaws.com"
     [ "$status" -eq 0 ]
 }
 
 @test "verify_domain_configuration handles missing dig" {
-    local original_path="$PATH"
-    export PATH=""
+    set_mock_dig_available "false"
     run verify_domain_configuration "example.com" "test-lb.us-east-1.elb.amazonaws.com"
-    export PATH="$original_path"
+    set_mock_dig_available "true"
     [ "$status" -eq 0 ]
     assert_output --partial "dig command not available"
 }
 
 @test "test_https_endpoint tests HTTPS connection" {
-    if ! command -v curl &> /dev/null; then
-        skip "curl not available"
-    fi
-    # Mock curl to succeed
-    curl() {
-        return 0
-    }
     run test_https_endpoint "example.com"
     [ "$status" -eq 0 ]
 }
 
 @test "test_https_endpoint handles missing curl" {
-    local original_path="$PATH"
-    export PATH=""
+    set_mock_curl_available "false"
     run test_https_endpoint "example.com"
-    export PATH="$original_path"
+    set_mock_curl_available "true"
     [ "$status" -eq 0 ]
     assert_output --partial "curl not available"
 }

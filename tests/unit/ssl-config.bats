@@ -52,22 +52,14 @@ teardown() {
 }
 
 @test "verify_ssl_configuration tests HTTPS endpoint" {
-    if ! command -v curl &> /dev/null; then
-        skip "curl not available"
-    fi
-    # Mock curl to succeed
-    curl() {
-        return 0
-    }
     run verify_ssl_configuration "test-env.us-east-1.elasticbeanstalk.com"
     [ "$status" -eq 0 ]
 }
 
 @test "verify_ssl_configuration handles missing curl" {
-    local original_path="$PATH"
-    export PATH=""
+    set_mock_curl_available "false"
     run verify_ssl_configuration "test-env.us-east-1.elasticbeanstalk.com"
-    export PATH="$original_path"
+    set_mock_curl_available "true"
     [ "$status" -eq 0 ]
     assert_output --partial "curl not available"
 }

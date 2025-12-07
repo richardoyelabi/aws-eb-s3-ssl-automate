@@ -61,14 +61,23 @@ teardown() {
 }
 
 @test "compare_configuration detects same values" {
-    # Skip - the grep-based JSON parsing in compare_configuration requires 
-    # specific JSON formatting that's hard to replicate in tests
-    skip "JSON parsing requires real AWS CLI output format"
+    local current_config='[
+        {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "InstanceType",
+          "Value": "t3.micro"
+        }
+    ]'
+    run compare_configuration "$current_config" "aws:autoscaling:launchconfiguration" "InstanceType" "t3.micro"
+    [ "$status" -eq 0 ]
+    [ "$output" = "same" ]
 }
 
 @test "update_environment_configuration handles changes by skipping in test mode" {
-    # In test mode, the function will detect changes and skip the update
+    # Set different values than mock returns to trigger change detection
+    export INSTANCE_TYPE="t2.large"
     run update_environment_configuration "test-app" "test-env" "" "test-profile"
+    export INSTANCE_TYPE="t3.micro"
     [ "$status" -eq 0 ]
     assert_output --partial "Skipping environment update"
 }

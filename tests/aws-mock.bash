@@ -3,17 +3,10 @@
 # AWS CLI mocking for testing
 # Load this in tests to mock AWS commands
 
-# Mock state tracking
-declare -A MOCK_STATE
-MOCK_STATE["buckets"]=""
-MOCK_STATE["roles"]=""
-MOCK_STATE["policies"]=""
-MOCK_STATE["instance_profiles"]=""
-MOCK_STATE["applications"]=""
-MOCK_STATE["environments"]=""
-MOCK_STATE["certificates"]=""
-MOCK_STATE["hosted_zones"]=""
-MOCK_STATE["dns_records"]=""
+# Mock state tracking (using environment variables that can be exported)
+export MOCK_CURL_AVAILABLE="true"
+export MOCK_DIG_AVAILABLE="true"
+export MOCK_JQ_AVAILABLE="true"
 
 # Helper function to extract argument value (portable alternative to grep -oP)
 get_arg_value() {
@@ -24,6 +17,12 @@ get_arg_value() {
 }
 
 mock_aws() {
+    # Handle --version flag before parsing service/operation
+    if [[ "$1" == "--version" ]]; then
+        echo "aws-cli/2.13.0 Python/3.11.0 Linux/5.15.0-119-generic exe/x86_64.ubuntu.22 prompt/off"
+        return 0
+    fi
+
     local service="$1"
     local operation="$2"
     shift 2
@@ -362,12 +361,13 @@ CONFIGJSON
             ;;
         acm.describe-certificate)
             local query=$(get_arg_value "--query" "$all_args")
+            local mock_status="${MOCK_ACM_CERT_STATUS:-ISSUED}"
             if [[ "$query" == *"Status"* ]]; then
-                echo "ISSUED"
+                echo "$mock_status"
             elif [[ "$query" == *"DomainValidationOptions"* ]]; then
                 echo '[{"DomainName": "example.com", "ValidationStatus": "SUCCESS", "ResourceRecord": {"Name": "_example.com", "Type": "CNAME", "Value": "validation-value"}}]'
             else
-                echo '{"Certificate": {"Status": "ISSUED", "DomainName": "example.com", "DomainValidationOptions": [{"DomainName": "example.com", "ValidationStatus": "SUCCESS"}]}}'
+                echo '{"Certificate": {"Status": "'"$mock_status"'", "DomainName": "example.com", "DomainValidationOptions": [{"DomainName": "example.com", "ValidationStatus": "SUCCESS"}]}}'
             fi
             ;;
 
@@ -387,7 +387,240 @@ aws() {
     fi
 }
 
+# Mock external tools
+mock_curl() {
+    local all_args="$*"
+    # Default successful response
+    if [[ "$all_args" == *"--silent"* ]] && [[ "$all_args" == *"--fail"* ]]; then
+        # HTTPS connectivity test - succeed by default
+        return 0
+    elif [[ "$all_args" == *"--connect-timeout"* ]] && [[ "$all_args" == *"--max-time"* ]]; then
+        # HTTPS endpoint test - succeed by default
+        return 0
+    else
+        # Generic curl success
+        echo "Mock curl response"
+        return 0
+    fi
+}
+
+mock_dig() {
+    local all_args="$*"
+    # Mock DNS lookups - return test values based on query type
+    if [[ "$all_args" == *"NS"* ]]; then
+        # NS record queries for DNS provider detection - extract domain from args
+        local domain=""
+        for arg in "$@"; do
+            if [[ "$arg" == "NS" ]]; then
+                continue
+            elif [[ "$arg" == *".com" ]] && [[ "$arg" != *"+"* ]] && [[ "$arg" != *"-"* ]]; then
+                domain="$arg"
+                break
+            fi
+        done
+
+        case "$domain" in
+            godaddy.com)
+                echo "ns1.godaddy.com"
+                echo "ns2.godaddy.com"
+                ;;
+            route53-domain.com)
+                echo "ns1.awsdns-12.com"
+                echo "ns2.awsdns-45.net"
+                ;;
+            example.com)
+                echo "ns1.awsdns-12.com"
+                echo "ns2.awsdns-45.net"
+                ;;
+            *)
+                echo "ns1.unknown-provider.com"
+                ;;
+        esac
+    else
+        # Regular A/CNAME lookups
+        if [[ "$all_args" == *"example.com"* ]]; then
+            echo "test-lb.us-east-1.elb.amazonaws.com"
+        elif [[ "$all_args" == *"api.example.com"* ]]; then
+            echo "api-lb.us-east-1.elb.amazonaws.com"
+        else
+            echo "mock-dns-response"
+        fi
+    fi
+    return 0
+}
+
+mock_jq() {
+    # Parse options and arguments
+    local compact=false
+    local sort_keys=false
+    local filter=""
+    local file=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -c|--compact-output)
+                compact=true
+                shift
+                ;;
+            -S|--sort-keys)
+                sort_keys=true
+                shift
+                ;;
+            -*)
+                # Ignore other options
+                shift
+                ;;
+            *)
+                if [ -z "$filter" ]; then
+                    filter="$1"
+                elif [ -z "$file" ]; then
+                    file="$1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Read input from file or stdin
+    local input
+    if [ -n "$file" ] && [ -f "$file" ]; then
+        input=$(cat "$file")
+    else
+        input=$(cat)
+    fi
+
+    # Simple mock jq that handles basic filters used in tests
+    case "$filter" in
+        '.')
+            # Identity filter - return input as-is
+            echo "$input"
+            ;;
+        '.[]')
+            # Extract array elements - mock behavior
+            if [[ "$input" == *'['* ]]; then
+                # If input looks like JSON array, return mock elements
+                echo '{"mock": "array_element"}'
+            else
+                echo "$input"
+            fi
+            ;;
+        *'.Name'*)
+            # Extract Name field - return mock names
+            echo "mock-name"
+            ;;
+        *'.Value'*)
+            # Extract Value field - return mock values
+            echo "mock-value"
+            ;;
+        *'.Type'*)
+            # Extract Type field - return CNAME for DNS tests
+            echo "CNAME"
+            ;;
+        *)
+            # Default: return input formatted as if processed by jq
+            echo "$input" | tr -d '\n' | sed 's/  */ /g'
+            ;;
+    esac
+    return 0
+}
+
+# Override external commands when in test mode
+curl() {
+    if [ "$TEST_MODE" = "true" ]; then
+        mock_curl "$@"
+    else
+        command curl "$@"
+    fi
+}
+
+# Function to dynamically control curl availability
+mock_command() {
+    if [[ "$1" = "-v" ]]; then
+        local cmd="$2"
+        case "$cmd" in
+            curl)
+                if [[ "$MOCK_CURL_AVAILABLE" = "true" ]]; then
+                    echo "curl"
+                    return 0
+                else
+                    return 1
+                fi
+                ;;
+            dig)
+                if [[ "$MOCK_DIG_AVAILABLE" = "true" ]]; then
+                    echo "dig"
+                    return 0
+                else
+                    return 1
+                fi
+                ;;
+            jq)
+                if [[ "$MOCK_JQ_AVAILABLE" = "true" ]]; then
+                    echo "jq"
+                    return 0
+                else
+                    return 1
+                fi
+                ;;
+            *)
+                builtin command "$@"
+                ;;
+        esac
+    else
+        builtin command "$@"
+    fi
+}
+
+# Override command builtin to control tool availability
+command() {
+    if [ "$TEST_MODE" = "true" ]; then
+        mock_command "$@"
+    else
+        builtin command "$@"
+    fi
+}
+
+dig() {
+    if [ "$TEST_MODE" = "true" ]; then
+        mock_dig "$@"
+    else
+        command dig "$@"
+    fi
+}
+
+jq() {
+    if [ "$TEST_MODE" = "true" ]; then
+        mock_jq "$@"
+    else
+        command jq "$@"
+    fi
+}
+
+# Control functions for mock state
+set_mock_curl_available() {
+    export MOCK_CURL_AVAILABLE="$1"
+}
+
+set_mock_dig_available() {
+    export MOCK_DIG_AVAILABLE="$1"
+}
+
+set_mock_jq_available() {
+    export MOCK_JQ_AVAILABLE="$1"
+}
+
 # Export functions so they're available in subshells (needed for bats' `run` command)
 export -f aws
 export -f mock_aws
 export -f get_arg_value
+export -f curl
+export -f mock_curl
+export -f dig
+export -f mock_dig
+export -f jq
+export -f mock_jq
+export -f command
+export -f mock_command
+export -f set_mock_curl_available
+export -f set_mock_dig_available
+export -f set_mock_jq_available

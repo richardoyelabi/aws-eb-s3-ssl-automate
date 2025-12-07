@@ -48,9 +48,6 @@ teardown() {
 }
 
 @test "normalize_json works with jq" {
-    if ! command -v jq &> /dev/null; then
-        skip "jq not available"
-    fi
     echo '{"a":1,"b":2}' > /tmp/test.json
     run normalize_json /tmp/test.json
     [ "$status" -eq 0 ]
@@ -59,11 +56,9 @@ teardown() {
 
 @test "normalize_json works without jq" {
     echo '{"a":1,"b":2}' > /tmp/test.json
-    # Temporarily remove jq from PATH
-    local original_path="$PATH"
-    export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$(which jq | xargs dirname)" | tr '\n' ':')
+    set_mock_jq_available "false"
     run normalize_json /tmp/test.json
-    export PATH="$original_path"
+    set_mock_jq_available "true"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 }

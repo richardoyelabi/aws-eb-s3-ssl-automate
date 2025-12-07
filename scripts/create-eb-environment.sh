@@ -136,7 +136,7 @@ compare_configuration() {
     local option_name=$3
     local desired_value=$4
     
-    local current_value=$(echo "$current_config" | grep -B2 "\"OptionName\": \"$option_name\"" | grep "\"Namespace\": \"$namespace\"" -A2 | grep "\"Value\"" | cut -d'"' -f4 || echo "")
+    local current_value=$(echo "$current_config" | grep -B2 -A1 "\"OptionName\": \"$option_name\"" | grep "\"Namespace\": \"$namespace\"" -A3 | grep "\"Value\"" | cut -d'"' -f4 || echo "")
     
     if [ "$current_value" != "$desired_value" ]; then
         echo "different"

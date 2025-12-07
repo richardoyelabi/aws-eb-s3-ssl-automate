@@ -65,9 +65,12 @@ teardown() {
 }
 
 @test "validate_certificate handles pending validation" {
-    # This would require more complex mocking to simulate user interaction
-    # For now, just verify the function exists and can be called
-    skip "Requires interactive input simulation"
+    export MOCK_ACM_CERT_STATUS="PENDING_VALIDATION"
+    run validate_certificate "arn:aws:acm:us-east-1:123456789012:certificate/test" "us-east-1"
+    unset MOCK_ACM_CERT_STATUS
+    [ "$status" -eq 1 ]
+    assert_output --partial "pending validation"
+    assert_output --partial "Skipping interactive prompt in test mode"
 }
 
 @test "request_certificate_instructions displays instructions" {
