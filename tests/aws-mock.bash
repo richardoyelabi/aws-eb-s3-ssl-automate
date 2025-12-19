@@ -210,7 +210,7 @@ mock_aws() {
                 return 1
             fi
             if [[ "$query" == *"LoadBalancers[0].Name"* ]]; then
-                echo "test-lb-1234567890"
+                echo "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/test-lb-1234567890/1234567890abcdef"
             elif [[ "$query" == *"LoadBalancers[0]"* ]]; then
                 echo '{"LoadBalancers": [{"Name": "test-lb-1234567890"}]}'
             else
@@ -295,9 +295,9 @@ CONFIGJSON
                 elif [[ "$query" == *"CanonicalHostedZoneId"* ]]; then
                     echo "Z35SXDOTRQ7X7K"
                 elif [[ "$query" == *"LoadBalancerArn"* ]]; then
-                    echo "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/test-lb/1234567890abcdef"
+                    echo "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/test-lb-1234567890/1234567890abcdef"
                 else
-                    echo '{"LoadBalancers": [{"LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/test-lb/1234567890abcdef", "DNSName": "test-lb-1234567890.us-east-1.elb.amazonaws.com", "CanonicalHostedZoneId": "Z35SXDOTRQ7X7K"}]}'
+                    echo '{"LoadBalancers": [{"LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/test-lb-1234567890/1234567890abcdef", "DNSName": "test-lb-1234567890.us-east-1.elb.amazonaws.com", "CanonicalHostedZoneId": "Z35SXDOTRQ7X7K"}]}'
                 fi
             else
                 echo '{"LoadBalancers": [{"LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/test-lb/1234567890abcdef", "DNSName": "test-lb-1234567890.us-east-1.elb.amazonaws.com"}]}'

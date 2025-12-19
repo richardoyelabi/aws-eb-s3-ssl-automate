@@ -74,6 +74,14 @@ teardown() {
     assert_output --partial "Z35SXDOTRQ7X7K"
 }
 
+@test "get_load_balancer_dns handles ARN extraction correctly" {
+    export ENV_NAME="test-env"
+    # Mock should return ARN, function should extract name and work correctly
+    run get_load_balancer_dns "test-env"
+    [ "$status" -eq 0 ]
+    assert_output --partial "test-lb-1234567890.us-east-1.elb.amazonaws.com"
+}
+
 @test "detect_dns_provider detects GoDaddy" {
     run detect_dns_provider "godaddy.com"
     [ "$status" -eq 0 ]

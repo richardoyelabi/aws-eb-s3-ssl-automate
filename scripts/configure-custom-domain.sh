@@ -41,17 +41,20 @@ get_load_balancer_dns() {
     
     log_info "Retrieving load balancer DNS name..."
     
-    local lb_name=$(aws elasticbeanstalk describe-environment-resources \
+    local lb_arn=$(aws elasticbeanstalk describe-environment-resources \
         --environment-name "$env_name" \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION" \
         --query "EnvironmentResources.LoadBalancers[0].Name" \
         --output text)
-    
-    if [ -z "$lb_name" ] || [ "$lb_name" = "None" ]; then
+
+    if [ -z "$lb_arn" ] || [ "$lb_arn" = "None" ]; then
         log_error "Could not find load balancer for environment: $env_name"
         return 1
     fi
+
+    # Extract load balancer name from ARN (format: arn:aws:elasticloadbalancing:.../app/name/...)
+    local lb_name=$(echo "$lb_arn" | sed 's|.*/app/\([^/]*\)/.*|\1|')
     
     local lb_dns=$(aws elbv2 describe-load-balancers \
         --names "$lb_name" \
@@ -71,13 +74,16 @@ get_load_balancer_dns() {
 get_load_balancer_hosted_zone() {
     local env_name=$1
     
-    local lb_name=$(aws elasticbeanstalk describe-environment-resources \
+    local lb_arn=$(aws elasticbeanstalk describe-environment-resources \
         --environment-name "$env_name" \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION" \
         --query "EnvironmentResources.LoadBalancers[0].Name" \
         --output text)
-    
+
+    # Extract load balancer name from ARN (format: arn:aws:elasticloadbalancing:.../app/name/...)
+    local lb_name=$(echo "$lb_arn" | sed 's|.*/app/\([^/]*\)/.*|\1|')
+
     local lb_zone=$(aws elbv2 describe-load-balancers \
         --names "$lb_name" \
         --profile "$AWS_PROFILE" \
