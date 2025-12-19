@@ -89,3 +89,17 @@ teardown() {
     assert_output --partial "no certificate ARN found"
 }
 
+@test "configure_https_listener requires environment to exist" {
+    # This test verifies that configure_https_listener properly fails when environment doesn't exist
+    # This was the original bug - it was being called before environment creation
+
+    # Use the mocked environment that returns error for nonexistent-env
+    run configure_https_listener "test-app" "nonexistent-env" ""
+
+    # Should fail because environment doesn't exist
+    [ "$status" -ne 0 ]
+
+    # Verify the expected error message appears in stderr
+    assert_output --partial "No Environment found for EnvironmentName = nonexistent-env" 2>&1
+}
+

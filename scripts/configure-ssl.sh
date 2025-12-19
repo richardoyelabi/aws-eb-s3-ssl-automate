@@ -31,13 +31,16 @@ configure_https_listener() {
     log_info "Configuring HTTPS listener for environment: $env_name"
 
     # Check current configuration
-    local current_config=$(aws elasticbeanstalk describe-configuration-settings \
+    if ! current_config=$(aws elasticbeanstalk describe-configuration-settings \
         --application-name "$app_name" \
         --environment-name "$env_name" \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION" \
         --query 'ConfigurationSettings[0].OptionSettings' \
-        --output json)
+        --output json 2>&1); then
+        log_error "Failed to get configuration for environment $env_name: $current_config"
+        return 1
+    fi
 
     # Extract current HTTPS settings
     local current_protocol=$(echo "$current_config" | grep -A2 '"Namespace": "aws:elbv2:listener:443"' | grep '"OptionName": "Protocol"' -A1 | grep '"Value"' | cut -d'"' -f4 || echo "")

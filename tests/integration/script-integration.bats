@@ -20,3 +20,50 @@ teardown() {
     [ -n "$APP_NAME" ]
     [ -n "$ENV_NAME" ]
 }
+
+@test "setup script execution order is correct" {
+    # Test that the main setup script executes steps in the correct order
+    # This test verifies the fix for the SSL configuration timing issue
+
+    # Extract function calls from the main execution block
+    local function_calls=()
+
+    # Use grep to find the specific function calls we care about
+    while IFS= read -r func_name; do
+        # Trim leading whitespace
+        func_name=$(echo "$func_name" | sed 's/^[[:space:]]*//')
+        case "$func_name" in
+            setup_s3_buckets|setup_iam_roles|create_eb_environment|configure_ssl|configure_custom_domain|generate_instructions)
+                function_calls+=("$func_name")
+                ;;
+        esac
+    done < <(sed -n '/Execute setup steps/,/cleanup_temp_files/p' "$SCRIPT_DIR/setup-eb-environment.sh" | grep -E '^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*$')
+
+    # Verify the execution order
+    local expected_order=("setup_s3_buckets" "setup_iam_roles" "create_eb_environment" "configure_ssl" "configure_custom_domain" "generate_instructions")
+
+    # Check that we have the expected functions in order
+    local expected_index=0
+    for func in "${function_calls[@]}"; do
+        if [ "$func" = "${expected_order[$expected_index]}" ]; then
+            expected_index=$((expected_index + 1))
+        fi
+    done
+
+    # Should have found all expected functions in order
+    [ "$expected_index" -eq "${#expected_order[@]}" ]
+
+    # Verify SSL configuration happens AFTER environment creation
+    local ssl_index=-1
+    local env_index=-1
+    for i in "${!function_calls[@]}"; do
+        if [ "${function_calls[$i]}" = "configure_ssl" ]; then
+            ssl_index=$i
+        elif [ "${function_calls[$i]}" = "create_eb_environment" ]; then
+            env_index=$i
+        fi
+    done
+
+    # SSL configuration must come after environment creation
+    [ "$ssl_index" -gt "$env_index" ]
+}

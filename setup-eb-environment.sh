@@ -297,22 +297,25 @@ main() {
 
     setup_s3_buckets
 
-    # Configure SSL - always enable HTTPS, but conditionally require certificates
-    if [ "$skip_ssl" = false ]; then
-        if [ -n "$CUSTOM_DOMAIN" ]; then
-            # Custom domain requires ACM certificate
-            setup_ssl_certificate
-        else
-            log_info "Using AWS automatic SSL for default Elastic Beanstalk domain"
-        fi
-        # Always configure HTTPS listener (with or without custom certificates)
-        configure_ssl
-    else
-        log_warn "Skipping SSL configuration entirely (--skip-ssl flag used)"
+    # Validate SSL Certificate (if custom domain) - can be done before environment creation
+    if [ "$skip_ssl" = false ] && [ -n "$CUSTOM_DOMAIN" ]; then
+        # Custom domain requires ACM certificate - validate it exists
+        setup_ssl_certificate
     fi
 
     setup_iam_roles
     create_eb_environment
+
+    # Configure SSL on Load Balancer - MUST happen after environment creation
+    if [ "$skip_ssl" = false ]; then
+        if [ -z "$CUSTOM_DOMAIN" ]; then
+            log_info "Using AWS automatic SSL for default Elastic Beanstalk domain"
+        fi
+        # Configure HTTPS listener (with or without custom certificates)
+        configure_ssl
+    else
+        log_warn "Skipping SSL configuration entirely (--skip-ssl flag used)"
+    fi
 
     # Configure custom domain if enabled
     configure_custom_domain

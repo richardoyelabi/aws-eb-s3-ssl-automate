@@ -218,6 +218,13 @@ mock_aws() {
             fi
             ;;
         elasticbeanstalk.describe-configuration-settings)
+            # Check if environment exists first (simulate real AWS behavior)
+            local env_name=$(get_arg_value "--environment-name" "$all_args")
+            if [[ "$env_name" == "nonexistent-env" ]]; then
+                echo "An error occurred (InvalidParameterValue) when calling the DescribeConfigurationSettings operation: No Environment found for EnvironmentName = nonexistent-env." >&2
+                return 1
+            fi
+
             # Return multi-line JSON (like real AWS CLI does) for grep-based parsing
             cat << 'CONFIGJSON'
 {
