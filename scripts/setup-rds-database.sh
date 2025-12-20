@@ -421,7 +421,7 @@ create_or_update_db_instance() {
 update_eb_environment_variables() {
     local db_identifier=$1
     local master_password=$2
-    local env_name="${APP_NAME}-${ENV_NAME}"
+    local env_name="$ENV_NAME"
     
     log_info "Getting database endpoint..."
     
@@ -511,9 +511,9 @@ EOF
 # Idempotent: All sub-functions follow check-before-create pattern
 main() {
     log_info "Starting RDS database setup..."
-    
+
     local db_identifier="${APP_NAME}-${ENV_NAME}-db"
-    local env_name="${APP_NAME}-${ENV_NAME}"
+    local env_name="$ENV_NAME"
     local subnet_group_name="${APP_NAME}-${ENV_NAME}-db-subnet-group"
     local security_group_name="${APP_NAME}-${ENV_NAME}-db-sg"
     
