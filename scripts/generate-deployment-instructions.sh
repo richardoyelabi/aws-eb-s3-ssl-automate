@@ -6,10 +6,10 @@
 set -e
 
 # Color codes for output
-GREEN="\033[0;32m"
-YELLOW="\033[1;33m"
-CYAN="\033[0;36m"
-NC="\033[0m" # No Color
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'
+NC=$'\033[0m' # No Color
 
 generate_instructions() {
     local env_url=$1
