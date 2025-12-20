@@ -1,6 +1,6 @@
 # AWS Elastic Beanstalk S3 SSL Automation
 
-A shell script automation tool that sets up a complete AWS Elastic Beanstalk environment with S3 buckets for static assets and file uploads, plus SSL certificate configuration via AWS Certificate Manager.
+A somewhat opinionated, comprehensive shell script automation tool that provisions a fully-configured AWS Elastic Beanstalk environment. The script automates the creation and configuration of an Elastic Beanstalk application, sets up separate S3 buckets for static assets (read-only) and file uploads (full access), and integrates with AWS Certificate Manager to handle SSL certificate procurement and HTTPS setup. It also manages RDS database provisioning, IAM roles and policies, environment variables, load balancer configuration, and optional custom domain and Route 53 DNS record automation, making deployment on AWS streamlined and repeatable with minimal manual intervention.
 
 ## Features
 
