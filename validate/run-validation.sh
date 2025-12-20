@@ -41,6 +41,7 @@ echo ""
 ./validate/prerequisites.sh
 ./validate/permissions.sh
 ./validate/config.sh
+./validate/rds.sh
 ./validate/environment.sh
 
 echo ""

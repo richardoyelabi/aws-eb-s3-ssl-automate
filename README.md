@@ -5,13 +5,14 @@ A shell script automation tool that sets up a complete AWS Elastic Beanstalk env
 ## Features
 
 - **Automated EB Environment Creation**: Creates and configures Elastic Beanstalk application and environment
+- **RDS Database Integration**: PostgreSQL RDS instance with Multi-AZ deployment and automated backups
 - **Dual S3 Buckets**: Sets up separate buckets for static assets (read-only) and file uploads (full access)
 - **SSL/HTTPS Configuration**: Integrates with AWS Certificate Manager for HTTPS support
 - **Custom Domain Configuration**: Supports custom domains and subdomains with optional Route 53 automation
 - **Route 53 DNS Management**: Automatically creates DNS records for custom domains (if hosted in Route 53)
-- **IAM Role Management**: Creates or configures IAM roles with appropriate S3 permissions
+- **IAM Role Management**: Creates or configures IAM roles with appropriate S3 and Secrets Manager permissions
 - **Load Balancer Setup**: Configures Application Load Balancer with HTTPS listener and optional HTTP redirect
-- **Environment Variables**: Automatically configures environment variables for S3 bucket access
+- **Environment Variables**: Automatically configures environment variables for S3 bucket and database access
 - **Deployment Instructions**: Generates customized deployment instructions for your application
 
 ## Validation vs Testing
@@ -85,6 +86,9 @@ Run during development to verify functionality:
   - ACM (list and describe certificates)
   - EC2 (for EB instances)
   - Elastic Load Balancing (for ALB configuration)
+  - RDS (create and manage database instances)
+  - Secrets Manager (store database credentials)
+  - VPC (manage security groups and subnets)
 
 - **ACM Certificate**: SSL certificate for your domain (will be validated during setup)
 
@@ -689,6 +693,71 @@ cd /path/to/your/app
 eb deploy
 ```
 
+## Database Configuration
+
+The automation creates a PostgreSQL RDS instance with the following features:
+
+- **Multi-AZ deployment** for high availability
+- **Automated backups** with 7-day retention (configurable 0-35 days)
+- **Encryption at rest** using AWS KMS
+- **Private access only** (not publicly accessible)
+- **Security group** allowing access only from EB instances
+- **Secrets Manager** for secure password storage
+
+### Database Settings
+
+Configure your database in `config.env`:
+
+```bash
+# Database Configuration
+DB_ENGINE="postgres"                              # Database engine
+DB_ENGINE_VERSION="16.3"                         # Engine version
+DB_INSTANCE_CLASS="db.t3.micro"                  # Instance size
+DB_ALLOCATED_STORAGE="20"                        # Storage in GB
+DB_STORAGE_TYPE="gp3"                            # Storage type
+DB_NAME="${APP_NAME//-/_}_${ENV_NAME}"           # Database name
+DB_USERNAME="dbadmin"                            # Master username
+DB_MASTER_PASSWORD=""                            # Leave empty for auto-generation
+DB_MULTI_AZ="true"                               # Enable Multi-AZ
+DB_BACKUP_RETENTION_DAYS="7"                     # Backup retention
+DB_BACKUP_WINDOW="03:00-04:00"                   # Backup window (UTC)
+DB_MAINTENANCE_WINDOW="mon:04:00-mon:05:00"      # Maintenance window
+DB_STORAGE_ENCRYPTED="true"                      # Enable encryption
+DB_PUBLICLY_ACCESSIBLE="false"                   # Public access (keep false)
+DB_SKIP_FINAL_SNAPSHOT="false"                   # Skip final snapshot on delete
+```
+
+### Database Connection
+
+Database connection details are automatically configured as environment variables in your Elastic Beanstalk environment:
+
+- `DATABASE_URL`: Full PostgreSQL connection string
+- `DB_HOST`: Database endpoint
+- `DB_PORT`: Database port (5432)
+- `DB_NAME`: Database name
+- `DB_USERNAME`: Master username
+- `DB_PASSWORD`: Master password (auto-generated if not provided)
+
+### Password Management
+
+If `DB_MASTER_PASSWORD` is left empty, a secure password will be automatically generated and stored in AWS Secrets Manager at:
+
+```
+<APP_NAME>/<ENV_NAME>/db-password
+```
+
+This password is automatically retrieved and configured in your EB environment during setup.
+
+### Security Considerations
+
+- The database is created in the same VPC as your EB environment
+- Only EB instances can access the database (via security group rules)
+- All connections are encrypted in transit
+- Storage is encrypted at rest
+- Passwords are never stored in plain text in configuration files
+
+For detailed database management, see [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md).
+
 ## Deployment
 
 After the environment is created, deploy your application:
@@ -714,6 +783,12 @@ Your application will have access to these environment variables:
 
 - `STATIC_ASSETS_BUCKET`: Name of the static assets S3 bucket
 - `UPLOADS_BUCKET`: Name of the uploads S3 bucket
+- `DATABASE_URL`: PostgreSQL connection string (e.g., `postgresql://user:pass@host:port/dbname`)
+- `DB_HOST`: Database endpoint hostname
+- `DB_PORT`: Database port (default: 5432)
+- `DB_NAME`: Database name
+- `DB_USERNAME`: Database username
+- `DB_PASSWORD`: Database password
 - `AWS_REGION`: AWS region where resources are located
 
 ### Example Application Code

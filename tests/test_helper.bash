@@ -30,6 +30,23 @@ setup_test_env() {
     export DOMAIN_NAME="${DOMAIN_NAME:-example.com}"
     export CUSTOM_DOMAIN="${CUSTOM_DOMAIN:-}"
     export AUTO_CONFIGURE_DNS="${AUTO_CONFIGURE_DNS:-false}"
+    
+    # Database configuration
+    export DB_ENGINE="${DB_ENGINE:-postgres}"
+    export DB_ENGINE_VERSION="${DB_ENGINE_VERSION:-16.3}"
+    export DB_INSTANCE_CLASS="${DB_INSTANCE_CLASS:-db.t3.micro}"
+    export DB_ALLOCATED_STORAGE="${DB_ALLOCATED_STORAGE:-20}"
+    export DB_STORAGE_TYPE="${DB_STORAGE_TYPE:-gp3}"
+    export DB_NAME="${DB_NAME:-test_app_test_env}"
+    export DB_USERNAME="${DB_USERNAME:-dbadmin}"
+    export DB_MASTER_PASSWORD="${DB_MASTER_PASSWORD:-}"
+    export DB_MULTI_AZ="${DB_MULTI_AZ:-true}"
+    export DB_BACKUP_RETENTION_DAYS="${DB_BACKUP_RETENTION_DAYS:-7}"
+    export DB_BACKUP_WINDOW="${DB_BACKUP_WINDOW:-03:00-04:00}"
+    export DB_MAINTENANCE_WINDOW="${DB_MAINTENANCE_WINDOW:-mon:04:00-mon:05:00}"
+    export DB_STORAGE_ENCRYPTED="${DB_STORAGE_ENCRYPTED:-true}"
+    export DB_PUBLICLY_ACCESSIBLE="${DB_PUBLICLY_ACCESSIBLE:-false}"
+    export DB_SKIP_FINAL_SNAPSHOT="${DB_SKIP_FINAL_SNAPSHOT:-false}"
 
     # Create temporary directory for test artifacts
     export TEST_TMPDIR=$(mktemp -d)

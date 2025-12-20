@@ -33,14 +33,14 @@ teardown() {
         # Trim leading whitespace
         func_name=$(echo "$func_name" | sed 's/^[[:space:]]*//')
         case "$func_name" in
-            setup_s3_buckets|setup_iam_roles|create_eb_environment|configure_ssl|configure_custom_domain|generate_instructions)
+            setup_s3_buckets|setup_iam_roles|create_eb_environment|setup_rds_database|configure_ssl|configure_custom_domain|generate_instructions)
                 function_calls+=("$func_name")
                 ;;
         esac
     done < <(sed -n '/Execute setup steps/,/cleanup_temp_files/p' "$SCRIPT_DIR/setup-eb-environment.sh" | grep -E '^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*$')
 
     # Verify the execution order
-    local expected_order=("setup_s3_buckets" "setup_iam_roles" "create_eb_environment" "configure_ssl" "configure_custom_domain" "generate_instructions")
+    local expected_order=("setup_s3_buckets" "setup_iam_roles" "create_eb_environment" "setup_rds_database" "configure_ssl" "configure_custom_domain" "generate_instructions")
 
     # Check that we have the expected functions in order
     local expected_index=0
@@ -66,4 +66,27 @@ teardown() {
 
     # SSL configuration must come after environment creation
     [ "$ssl_index" -gt "$env_index" ]
+    
+    # Verify RDS database setup happens AFTER environment creation
+    local db_index=-1
+    for i in "${!function_calls[@]}"; do
+        if [ "${function_calls[$i]}" = "setup_rds_database" ]; then
+            db_index=$i
+        fi
+    done
+    
+    # Database setup must come after environment creation
+    [ "$db_index" -gt "$env_index" ]
+}
+
+@test "database configuration variables are available" {
+    # Test that database configuration variables are set
+    source "$SCRIPT_DIR/config.env"
+    
+    [ -n "$DB_ENGINE" ]
+    [ -n "$DB_ENGINE_VERSION" ]
+    [ -n "$DB_INSTANCE_CLASS" ]
+    [ -n "$DB_ALLOCATED_STORAGE" ]
+    [ -n "$DB_NAME" ]
+    [ -n "$DB_USERNAME" ]
 }

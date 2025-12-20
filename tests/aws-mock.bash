@@ -237,6 +237,11 @@ mock_aws() {
           "Value": "t3.micro"
         },
         {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "SecurityGroups",
+          "Value": "sg-eb123456"
+        },
+        {
           "Namespace": "aws:autoscaling:asg",
           "OptionName": "MinSize",
           "Value": "1"
@@ -245,6 +250,11 @@ mock_aws() {
           "Namespace": "aws:autoscaling:asg",
           "OptionName": "MaxSize",
           "Value": "2"
+        },
+        {
+          "Namespace": "aws:ec2:vpc",
+          "OptionName": "VPCId",
+          "Value": "vpc-12345678"
         },
         {
           "Namespace": "aws:elasticbeanstalk:application:environment",
@@ -351,6 +361,118 @@ CONFIGJSON
             ;;
         route53.create-hosted-zone)
             echo '{"HostedZone": {"Id": "/hostedzone/Z1234567890ABC", "Name": "example.com."}, "DelegationSet": {"NameServers": ["ns-123.awsdns-12.com", "ns-456.awsdns-45.net"]}}'
+            ;;
+
+        # RDS
+        rds.describe-db-instances)
+            local db_identifier=$(get_arg_value "--db-instance-identifier" "$all_args")
+            local query=$(get_arg_value "--query" "$all_args")
+            
+            if [[ "$db_identifier" == "test-app-test-env-db" ]] || [[ "$db_identifier" == "existing-db" ]]; then
+                if [[ "$query" == *"DBInstances[0].Endpoint.Address"* ]]; then
+                    echo "test-db.cluster-xyz.us-east-1.rds.amazonaws.com"
+                elif [[ "$query" == *"DBInstances[0].Endpoint.Port"* ]]; then
+                    echo "5432"
+                elif [[ "$query" == *"DBInstances[0]"* ]]; then
+                    echo '{"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "MultiAZ": true, "Endpoint": {"Address": "test-db.cluster-xyz.us-east-1.rds.amazonaws.com", "Port": 5432}}'
+                else
+                    echo '{"DBInstances": [{"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "MultiAZ": true, "Endpoint": {"Address": "test-db.cluster-xyz.us-east-1.rds.amazonaws.com", "Port": 5432}}]}'
+                fi
+            else
+                if [[ "$query" == *"DBInstances"* ]]; then
+                    echo "null"
+                else
+                    echo "An error occurred (DBInstanceNotFound) when calling the DescribeDBInstances operation: DBInstance not found: $db_identifier" >&2
+                    return 1
+                fi
+            fi
+            ;;
+        rds.create-db-instance)
+            local db_identifier=$(get_arg_value "--db-instance-identifier" "$all_args")
+            echo '{"DBInstance": {"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "DBInstanceStatus": "creating"}}'
+            ;;
+        rds.wait)
+            local wait_type="$1"
+            if [[ "$wait_type" == "db-instance-available" ]]; then
+                return 0
+            fi
+            ;;
+        rds.describe-db-subnet-groups)
+            local subnet_group_name=$(get_arg_value "--db-subnet-group-name" "$all_args")
+            if [[ "$subnet_group_name" == "test-app-test-env-db-subnet-group" ]] || [[ "$subnet_group_name" == "existing-subnet-group" ]]; then
+                echo '{"DBSubnetGroups": [{"DBSubnetGroupName": "'"$subnet_group_name"'", "DBSubnetGroupDescription": "Test subnet group", "VpcId": "vpc-12345678", "Subnets": [{"SubnetIdentifier": "subnet-12345678"}]}]}'
+            else
+                echo "An error occurred (DBSubnetGroupNotFoundFault) when calling the DescribeDBSubnetGroups operation: DBSubnetGroup not found: $subnet_group_name" >&2
+                return 1
+            fi
+            ;;
+        rds.create-db-subnet-group)
+            local subnet_group_name=$(get_arg_value "--db-subnet-group-name" "$all_args")
+            echo '{"DBSubnetGroup": {"DBSubnetGroupName": "'"$subnet_group_name"'", "DBSubnetGroupDescription": "Test subnet group", "VpcId": "vpc-12345678"}}'
+            ;;
+
+        # Secrets Manager
+        secretsmanager.describe-secret)
+            local secret_id=$(get_arg_value "--secret-id" "$all_args")
+            if [[ "$secret_id" == *"/db-password" ]] || [[ "$secret_id" == "test-app/test-env/db-password" ]]; then
+                echo '{"Name": "'"$secret_id"'", "ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:'"$secret_id"'-ABCDEF"}'
+            else
+                echo "An error occurred (ResourceNotFoundException) when calling the DescribeSecret operation: Secrets Manager can't find the specified secret." >&2
+                return 1
+            fi
+            ;;
+        secretsmanager.get-secret-value)
+            local secret_id=$(get_arg_value "--secret-id" "$all_args")
+            if [[ "$secret_id" == *"/db-password" ]] || [[ "$secret_id" == "test-app/test-env/db-password" ]]; then
+                echo "test-password-12345678"
+            else
+                echo "An error occurred (ResourceNotFoundException) when calling the GetSecretValue operation: Secrets Manager can't find the specified secret." >&2
+                return 1
+            fi
+            ;;
+        secretsmanager.create-secret)
+            local secret_name=$(get_arg_value "--name" "$all_args")
+            echo '{"ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:'"$secret_name"'-ABCDEF", "Name": "'"$secret_name"'"}'
+            ;;
+
+        # EC2 (for VPC/subnets/security groups)
+        ec2.describe-subnets)
+            local vpc_id=$(get_arg_value "Name=vpc-id,Values=" "$all_args")
+            if [[ "$vpc_id" == "vpc-12345678" ]] || [[ -n "$vpc_id" ]]; then
+                echo '{"Subnets": [{"SubnetId": "subnet-12345678", "VpcId": "vpc-12345678", "AvailabilityZone": "us-east-1a"}, {"SubnetId": "subnet-87654321", "VpcId": "vpc-12345678", "AvailabilityZone": "us-east-1b"}]}'
+            else
+                echo '{"Subnets": []}'
+            fi
+            ;;
+        ec2.describe-security-groups)
+            local all_args_str="$all_args"
+            if [[ "$all_args_str" == *"group-id"* ]]; then
+                local sg_id=$(echo "$all_args_str" | sed -n 's/.*--group-ids \([^ ]*\).*/\1/p')
+                if [[ "$sg_id" == "sg-"* ]]; then
+                    echo '{"SecurityGroups": [{"GroupId": "'"$sg_id"'", "GroupName": "test-db-sg", "VpcId": "vpc-12345678", "IpPermissions": [{"IpProtocol": "tcp", "FromPort": 5432, "ToPort": 5432, "UserIdGroupPairs": [{"GroupId": "sg-eb123456"}]}]}]}'
+                else
+                    echo '{"SecurityGroups": []}'
+                fi
+            elif [[ "$all_args_str" == *"group-name"* ]]; then
+                local sg_name=$(echo "$all_args_str" | sed -n 's/.*Name=group-name,Values=\([^ ]*\).*/\1/p')
+                if [[ "$sg_name" == "test-app-test-env-db-sg" ]] || [[ "$sg_name" == "existing-db-sg" ]]; then
+                    echo '{"SecurityGroups": [{"GroupId": "sg-db123456", "GroupName": "'"$sg_name"'", "VpcId": "vpc-12345678"}]}'
+                else
+                    echo '{"SecurityGroups": []}'
+                fi
+            else
+                echo '{"SecurityGroups": []}'
+            fi
+            ;;
+        ec2.create-security-group)
+            local sg_name=$(get_arg_value "--group-name" "$all_args")
+            echo "sg-new123456"
+            ;;
+        ec2.authorize-security-group-ingress)
+            return 0
+            ;;
+        ec2.create-tags)
+            return 0
             ;;
 
         # ACM
@@ -616,6 +738,24 @@ set_mock_jq_available() {
     export MOCK_JQ_AVAILABLE="$1"
 }
 
+# Mock openssl for password generation
+mock_openssl() {
+    if [[ "$1" == "rand" ]] && [[ "$2" == "-base64" ]]; then
+        # Return a mock base64-encoded random string
+        echo "dGVzdC1wYXNzd29yZC0xMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTA="
+    else
+        command openssl "$@"
+    fi
+}
+
+openssl() {
+    if [ "$TEST_MODE" = "true" ]; then
+        mock_openssl "$@"
+    else
+        command openssl "$@"
+    fi
+}
+
 # Export functions so they're available in subshells (needed for bats' `run` command)
 export -f aws
 export -f mock_aws
@@ -628,6 +768,8 @@ export -f jq
 export -f mock_jq
 export -f command
 export -f mock_command
+export -f openssl
+export -f mock_openssl
 export -f set_mock_curl_available
 export -f set_mock_dig_available
 export -f set_mock_jq_available

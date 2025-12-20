@@ -154,6 +154,14 @@ create_eb_environment() {
     main
 }
 
+setup_rds_database() {
+    log_section "Setting Up RDS Database"
+    
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/scripts/setup-rds-database.sh"
+    main
+}
+
 configure_ssl() {
     log_section "Configuring SSL on Load Balancer"
     
@@ -190,6 +198,9 @@ cleanup_temp_files() {
     rm -f /tmp/https-options.json
     rm -f /tmp/custom-domain.txt
     rm -f /tmp/route53-*.json
+    rm -f /tmp/db-password.txt
+    rm -f /tmp/db-subnet-group.json
+    rm -f /tmp/db-env-options.json
 }
 
 show_usage() {
@@ -305,6 +316,9 @@ main() {
 
     setup_iam_roles
     create_eb_environment
+    
+    # Setup RDS database - MUST happen after environment creation
+    setup_rds_database
 
     # Configure SSL on Load Balancer - MUST happen after environment creation
     if [ "$skip_ssl" = false ]; then

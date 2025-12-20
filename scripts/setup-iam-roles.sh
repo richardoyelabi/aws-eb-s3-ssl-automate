@@ -70,6 +70,15 @@ create_s3_access_policy() {
         "arn:aws:s3:::${uploads_bucket}",
         "arn:aws:s3:::${uploads_bucket}/*"
       ]
+    },
+    {
+      "Sid": "SecretsManagerDatabaseAccess",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "arn:aws:secretsmanager:${AWS_REGION}:*:secret:${APP_NAME}/${ENV_NAME}/db-password-*"
     }
   ]
 }
