@@ -97,12 +97,40 @@ get_eb_vpc_info() {
         --query "ConfigurationSettings[0].OptionSettings[?OptionName=='VPCId'].Value" \
         --output text)
     
-    if [ -z "$vpc_id" ] || [ "$vpc_id" = "None" ]; then
-        log_error "Could not determine VPC ID from EB environment"
-        exit 1
+    if [ -z "$vpc_id" ] || [ "$vpc_id" = "None" ] || [ "$vpc_id" = "null" ]; then
+        log_warn "VPC ID not found in EB configuration, querying from EC2 instance..."
+        
+        # Get instance ID from EB environment resources
+        local instance_id=$(aws elasticbeanstalk describe-environment-resources \
+            --environment-name "$env_name" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --query "EnvironmentResources.Instances[0].Id" \
+            --output text)
+        
+        if [ -z "$instance_id" ] || [ "$instance_id" = "None" ]; then
+            log_error "Could not determine VPC ID: No instances found in EB environment"
+            exit 1
+        fi
+        
+        # Get VPC ID from the EC2 instance
+        vpc_id=$(aws ec2 describe-instances \
+            --instance-ids "$instance_id" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --query "Reservations[0].Instances[0].VpcId" \
+            --output text)
+        
+        if [ -z "$vpc_id" ] || [ "$vpc_id" = "None" ]; then
+            log_error "Could not determine VPC ID from EC2 instance"
+            exit 1
+        fi
+        
+        log_info "Retrieved VPC from EC2 instance: $vpc_id"
+    else
+        log_info "Found VPC from EB configuration: $vpc_id"
     fi
     
-    log_info "Found VPC: $vpc_id"
     echo "$vpc_id"
 }
 
@@ -124,7 +152,7 @@ get_eb_security_group() {
     if [ -z "$sg_id" ] || [ "$sg_id" = "None" ]; then
         log_warn "Could not determine security group from EB environment, will use instance security group"
         
-        # Try to get instance security group
+        # Try to get instance security group from launch configuration
         sg_id=$(aws elasticbeanstalk describe-configuration-settings \
             --application-name "$APP_NAME" \
             --environment-name "$env_name" \
@@ -134,7 +162,42 @@ get_eb_security_group() {
             --output text)
     fi
     
-    log_info "Found security group: $sg_id"
+    # Check if we got a security group name instead of ID (IDs start with "sg-")
+    if [ -n "$sg_id" ] && [ "$sg_id" != "None" ] && [[ ! "$sg_id" =~ ^sg- ]]; then
+        log_warn "Got security group name instead of ID: $sg_id"
+        log_info "Retrieving security group ID from EC2 instance..."
+        
+        # Get instance ID from EB environment resources
+        local instance_id=$(aws elasticbeanstalk describe-environment-resources \
+            --environment-name "$env_name" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --query "EnvironmentResources.Instances[0].Id" \
+            --output text)
+        
+        if [ -z "$instance_id" ] || [ "$instance_id" = "None" ]; then
+            log_error "Could not determine security group ID: No instances found in EB environment"
+            exit 1
+        fi
+        
+        # Get security group ID from the EC2 instance
+        sg_id=$(aws ec2 describe-instances \
+            --instance-ids "$instance_id" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" \
+            --output text)
+        
+        if [ -z "$sg_id" ] || [ "$sg_id" = "None" ]; then
+            log_error "Could not determine security group ID from EC2 instance"
+            exit 1
+        fi
+        
+        log_info "Retrieved security group ID from EC2 instance: $sg_id"
+    else
+        log_info "Found security group: $sg_id"
+    fi
+    
     echo "$sg_id"
 }
 
