@@ -202,6 +202,12 @@ mock_aws() {
         elasticbeanstalk.update-environment)
             echo '{"EnvironmentName": "test-env", "Status": "Updating"}'
             ;;
+        elasticbeanstalk.wait)
+            local wait_type="$2"
+            if [[ "$wait_type" == "environment-updated" ]]; then
+                return 0
+            fi
+            ;;
         elasticbeanstalk.describe-environment-resources)
             local env_name=$(get_arg_value "--environment-name" "$all_args")
             local query=$(get_arg_value "--query" "$all_args")
@@ -223,6 +229,21 @@ mock_aws() {
             if [[ "$env_name" == "nonexistent-env" ]]; then
                 echo "An error occurred (InvalidParameterValue) when calling the DescribeConfigurationSettings operation: No Environment found for EnvironmentName = nonexistent-env." >&2
                 return 1
+            fi
+
+            local query=$(get_arg_value "--query" "$all_args")
+            local output=$(get_arg_value "--output" "$all_args")
+
+            # Handle specific queries
+            if [[ "$query" == "ConfigurationSettings[0].OptionSettings[?OptionName=='SecurityGroups'].Value" ]] && [[ "$output" == "text" ]]; then
+                echo "None"
+                return 0
+            elif [[ "$query" == *"launchconfiguration"* && "$query" == *"SecurityGroups"* ]] && [[ "$output" == "text" ]]; then
+                echo "sg-eb123456"
+                return 0
+            elif [[ "$query" == "ConfigurationSettings[0].OptionSettings[?OptionName=='VPCId'].Value" ]] && [[ "$output" == "text" ]]; then
+                echo "vpc-12345678"
+                return 0
             fi
 
             # Return multi-line JSON (like real AWS CLI does) for grep-based parsing

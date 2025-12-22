@@ -552,13 +552,21 @@ update_eb_environment_variables() {
 EOF
     
     # Update environment
+    log_info "Initiating environment update with database variables..."
     aws elasticbeanstalk update-environment \
+        --application-name "$APP_NAME" \
         --environment-name "$env_name" \
         --option-settings file:///tmp/db-env-options.json \
         --profile "$AWS_PROFILE" \
-        --region "$AWS_REGION" \
-        > /dev/null
-    
+        --region "$AWS_REGION"
+
+    log_info "Waiting for environment update to complete (this may take a few minutes)..."
+    aws elasticbeanstalk wait environment-updated \
+        --application-name "$APP_NAME" \
+        --environment-names "$env_name" \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION"
+
     log_info "Environment variables updated successfully"
     log_info "Database connection details:"
     log_info "  Host: $db_endpoint"
