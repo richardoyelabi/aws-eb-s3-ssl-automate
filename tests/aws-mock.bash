@@ -12,8 +12,18 @@ export MOCK_JQ_AVAILABLE="true"
 get_arg_value() {
     local arg_name="$1"
     local all_args="$2"
-    # Use sed to extract the value after the argument
-    echo "$all_args" | sed -n "s/.*${arg_name} \([^ ]*\).*/\1/p"
+
+    # Extract the value after the argument name
+    # Handle quoted strings by finding the text between double quotes after the argument
+    local after_arg=${all_args#*${arg_name} }
+    if [[ "$after_arg" == \"* ]]; then
+        # Starts with quote, extract until closing quote
+        local in_quotes=${after_arg#\"}
+        echo "${in_quotes%%\"*}"
+    else
+        # Not quoted, extract until space
+        echo "${after_arg%% *}"
+    fi
 }
 
 mock_aws() {
@@ -238,7 +248,7 @@ mock_aws() {
             if [[ "$query" == "ConfigurationSettings[0].OptionSettings[?OptionName=='SecurityGroups'].Value" ]] && [[ "$output" == "text" ]]; then
                 echo "None"
                 return 0
-            elif [[ "$query" == *"launchconfiguration"* && "$query" == *"SecurityGroups"* ]] && [[ "$output" == "text" ]]; then
+            elif [[ "$all_args" == *"launchconfiguration"* ]] && [[ "$all_args" == *"SecurityGroups"* ]] && [[ "$all_args" == *"--output text"* ]]; then
                 echo "sg-eb123456"
                 return 0
             elif [[ "$query" == "ConfigurationSettings[0].OptionSettings[?OptionName=='VPCId'].Value" ]] && [[ "$output" == "text" ]]; then
