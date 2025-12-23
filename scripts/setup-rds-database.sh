@@ -553,7 +553,7 @@ create_or_update_db_instance() {
         --preferred-maintenance-window \"$DB_MAINTENANCE_WINDOW\" \
         --storage-encrypted \
         --publicly-accessible \
-        --enable-cloudwatch-logs-exports postgresql upgrade"
+        --enable-cloudwatch-logs-exports postgresql"
     
     if [ "${DB_STORAGE_AUTOSCALING_ENABLED:-true}" = "true" ]; then
         create_cmd="$create_cmd --max-allocated-storage \"${DB_MAX_ALLOCATED_STORAGE:-100}\""
