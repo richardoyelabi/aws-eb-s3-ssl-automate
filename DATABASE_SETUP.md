@@ -18,6 +18,7 @@ The automation creates a PostgreSQL RDS database instance with production-ready 
 - [Security](#security)
 - [Backup and Recovery](#backup-and-recovery)
 - [Scaling and Performance](#scaling-and-performance)
+- [Database Autoscaling](#database-autoscaling)
 - [Connection Pooling](#connection-pooling)
 - [Migrations](#migrations)
 - [Monitoring](#monitoring)
@@ -238,6 +239,166 @@ Configure your application to:
 - Write to primary instance
 - Read from replica(s)
 - Handle replication lag
+
+## Database Autoscaling
+
+The automation supports two types of autoscaling: storage autoscaling and read replica autoscaling. Both can be configured via `config.env` to automatically adjust resources based on demand.
+
+### Storage Autoscaling
+
+Storage autoscaling automatically increases your database storage when running low on disk space, preventing storage-full errors without manual intervention.
+
+**Configuration** (`config.env`):
+
+```bash
+DB_STORAGE_AUTOSCALING_ENABLED="true"   # Enable storage autoscaling
+DB_ALLOCATED_STORAGE="20"                # Starting storage in GB
+DB_MAX_ALLOCATED_STORAGE="100"          # Maximum storage limit in GB
+```
+
+**How it works:**
+
+1. RDS monitors free storage space
+2. When free space drops below 10% (or 5GB), autoscaling triggers
+3. Storage increases by the greater of:
+   - 10% of current allocated storage
+   - 5 GB
+4. Storage grows up to `DB_MAX_ALLOCATED_STORAGE`
+5. No downtime during scaling
+
+**Important notes:**
+
+- Storage can only increase, never decrease
+- Autoscaling can trigger once every 6 hours
+- No additional cost beyond storage usage
+- Works with all storage types (gp3, gp2, io1)
+
+**Monitoring:**
+
+Watch these CloudWatch metrics:
+- `FreeStorageSpace` - Available disk space
+- `BurstBalance` - For gp2 volumes
+
+**Manual override:**
+
+To manually increase storage:
+
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier my-app-prod-db \
+  --allocated-storage 50 \
+  --apply-immediately \
+  --profile default \
+  --region us-east-1
+```
+
+### Read Replica Autoscaling
+
+Read replica autoscaling automatically adjusts the number of read replicas based on CPU utilization, helping handle variable read traffic efficiently.
+
+**Configuration** (`config.env`):
+
+```bash
+DB_READ_REPLICA_ENABLED="true"                    # Enable read replicas
+DB_READ_REPLICA_COUNT="1"                         # Initial number of replicas
+DB_READ_REPLICA_MIN_CAPACITY="1"                  # Minimum replicas (scale-in limit)
+DB_READ_REPLICA_MAX_CAPACITY="3"                  # Maximum replicas (scale-out limit)
+DB_READ_REPLICA_TARGET_CPU="70"                   # Target CPU % for scaling
+DB_READ_REPLICA_SCALE_IN_COOLDOWN="300"          # Wait 5min before removing replicas
+DB_READ_REPLICA_SCALE_OUT_COOLDOWN="60"          # Wait 1min before adding replicas
+```
+
+**How it works:**
+
+1. Application Auto Scaling monitors CPU utilization across read replicas
+2. When average CPU exceeds target (70%), adds a replica
+3. When average CPU drops below target, removes a replica
+4. Scaling respects min/max capacity limits
+5. Cooldown periods prevent rapid scaling
+
+**Use cases:**
+
+- **E-commerce sites:** Handle traffic spikes during sales
+- **News/media sites:** Scale for breaking news traffic
+- **SaaS applications:** Adjust to customer usage patterns
+- **Analytics workloads:** Scale for report generation
+
+**Application configuration:**
+
+Your application needs to:
+
+1. **Write to primary instance:**
+```python
+# Django settings.py
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'HOST': os.environ['DB_HOST'],  # Primary instance
+        'NAME': os.environ['DB_NAME'],
+        'USER': os.environ['DB_USERNAME'],
+        'PASSWORD': os.environ['DB_PASSWORD'],
+    }
+}
+```
+
+2. **Read from replicas** (using a read replica endpoint or load balancer):
+```python
+# For read-heavy queries
+from django.db import connections
+replica_cursor = connections['replica'].cursor()
+replica_cursor.execute("SELECT * FROM products")
+```
+
+**Cost considerations:**
+
+- Each replica costs the same as the primary instance class
+- With autoscaling: `min_capacity` × instance_cost to `max_capacity` × instance_cost
+- Example: With db.t3.small ($0.034/hr) and min=1, max=3:
+  - Minimum cost: $25/month (1 replica)
+  - Maximum cost: $75/month (3 replicas)
+  - Average cost varies with traffic patterns
+
+**Monitoring:**
+
+Watch these CloudWatch metrics:
+- `CPUUtilization` - Triggers scaling
+- `ReadReplicaLag` - Replication delay (should be < 1s)
+- `DatabaseConnections` - Connection usage per replica
+- Custom metric: `RDSReaderAverageCPUUtilization`
+
+**Manual management:**
+
+Create additional replicas manually:
+
+```bash
+aws rds create-db-instance-read-replica \
+  --db-instance-identifier my-app-prod-db-replica-4 \
+  --source-db-instance-identifier my-app-prod-db \
+  --db-instance-class db.t3.small \
+  --profile default \
+  --region us-east-1
+```
+
+Check autoscaling status:
+
+```bash
+aws application-autoscaling describe-scalable-targets \
+  --service-namespace rds \
+  --resource-ids db:my-app-prod-db \
+  --profile default \
+  --region us-east-1
+```
+
+### Best Practices for Autoscaling
+
+1. **Start conservative:** Begin with lower max limits and adjust based on monitoring
+2. **Monitor costs:** Set up billing alarms for unexpected scaling
+3. **Test scaling behavior:** Simulate load to verify autoscaling triggers correctly
+4. **Configure cooldowns:** Prevent rapid scaling that increases costs
+5. **Use appropriate targets:** 70% CPU is typical, but adjust for your workload
+6. **Plan for max capacity:** Ensure your VPC has enough IP addresses for max replicas
+7. **Handle replication lag:** Design queries to tolerate eventual consistency
+8. **Document scaling events:** Review autoscaling history to optimize settings
 
 ### Performance Insights
 

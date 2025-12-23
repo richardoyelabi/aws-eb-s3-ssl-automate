@@ -404,10 +404,23 @@ CONFIGJSON
                     echo "test-db.cluster-xyz.us-east-1.rds.amazonaws.com"
                 elif [[ "$query" == *"DBInstances[0].Endpoint.Port"* ]]; then
                     echo "5432"
+                elif [[ "$query" == *"DBInstances[0].MaxAllocatedStorage"* ]]; then
+                    echo "100"
                 elif [[ "$query" == *"DBInstances[0]"* ]]; then
-                    echo '{"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "MultiAZ": true, "Endpoint": {"Address": "test-db.cluster-xyz.us-east-1.rds.amazonaws.com", "Port": 5432}}'
+                    echo '{"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "MultiAZ": true, "MaxAllocatedStorage": 100, "Endpoint": {"Address": "test-db.cluster-xyz.us-east-1.rds.amazonaws.com", "Port": 5432}}'
+                elif [[ "$query" == *"ReadReplicaSourceDBInstanceIdentifier"* ]]; then
+                    echo ""
                 else
-                    echo '{"DBInstances": [{"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "MultiAZ": true, "Endpoint": {"Address": "test-db.cluster-xyz.us-east-1.rds.amazonaws.com", "Port": 5432}}]}'
+                    echo '{"DBInstances": [{"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "MultiAZ": true, "MaxAllocatedStorage": 100, "Endpoint": {"Address": "test-db.cluster-xyz.us-east-1.rds.amazonaws.com", "Port": 5432}}]}'
+                fi
+            elif [[ "$db_identifier" =~ -replica- ]]; then
+                if [[ "$query" == *"DBInstances[0].Endpoint.Address"* ]]; then
+                    echo "test-db-replica.cluster-xyz.us-east-1.rds.amazonaws.com"
+                elif [[ "$query" == *"DBInstances[0].Endpoint.Port"* ]]; then
+                    echo "5432"
+                else
+                    local source_db=$(echo "$db_identifier" | sed 's/-replica-[0-9]*$//')
+                    echo '{"DBInstances": [{"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "ReadReplicaSourceDBInstanceIdentifier": "'"$source_db"'", "Endpoint": {"Address": "test-db-replica.cluster-xyz.us-east-1.rds.amazonaws.com", "Port": 5432}}]}'
                 fi
             else
                 if [[ "$query" == *"DBInstances"* ]]; then
@@ -421,6 +434,15 @@ CONFIGJSON
         rds.create-db-instance)
             local db_identifier=$(get_arg_value "--db-instance-identifier" "$all_args")
             echo '{"DBInstance": {"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "DBInstanceStatus": "creating"}}'
+            ;;
+        rds.modify-db-instance)
+            local db_identifier=$(get_arg_value "--db-instance-identifier" "$all_args")
+            echo '{"DBInstance": {"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "DBInstanceStatus": "modifying"}}'
+            ;;
+        rds.create-db-instance-read-replica)
+            local db_identifier=$(get_arg_value "--db-instance-identifier" "$all_args")
+            local source_db=$(get_arg_value "--source-db-instance-identifier" "$all_args")
+            echo '{"DBInstance": {"DBInstanceIdentifier": "'"$db_identifier"'", "DBInstanceClass": "db.t3.micro", "Engine": "postgres", "ReadReplicaSourceDBInstanceIdentifier": "'"$source_db"'", "DBInstanceStatus": "creating"}}'
             ;;
         rds.wait)
             local wait_type="$1"
@@ -440,6 +462,28 @@ CONFIGJSON
         rds.create-db-subnet-group)
             local subnet_group_name=$(get_arg_value "--db-subnet-group-name" "$all_args")
             echo '{"DBSubnetGroup": {"DBSubnetGroupName": "'"$subnet_group_name"'", "DBSubnetGroupDescription": "Test subnet group", "VpcId": "vpc-12345678"}}'
+            ;;
+
+        # Application Auto Scaling
+        application-autoscaling.register-scalable-target)
+            local resource_id=$(get_arg_value "--resource-id" "$all_args")
+            echo '{"ResponseMetadata": {"RequestId": "test-request-id"}}'
+            return 0
+            ;;
+        application-autoscaling.put-scaling-policy)
+            local policy_name=$(get_arg_value "--policy-name" "$all_args")
+            local resource_id=$(get_arg_value "--resource-id" "$all_args")
+            echo '{"PolicyARN": "arn:aws:autoscaling:us-east-1:123456789012:scalingPolicy:test-policy-id:resource/rds/'"$resource_id"':policyName/'"$policy_name"'"}'
+            return 0
+            ;;
+        application-autoscaling.describe-scalable-targets)
+            local resource_id=$(get_arg_value "--resource-ids" "$all_args")
+            if [[ -n "$resource_id" ]]; then
+                echo '{"ScalableTargets": [{"ServiceNamespace": "rds", "ResourceId": "'"$resource_id"'", "ScalableDimension": "rds:replica:ReadReplicaCount", "MinCapacity": 1, "MaxCapacity": 3}]}'
+            else
+                echo '{"ScalableTargets": []}'
+            fi
+            return 0
             ;;
 
         # Secrets Manager

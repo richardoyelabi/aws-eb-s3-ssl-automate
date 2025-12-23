@@ -249,3 +249,159 @@ teardown() {
     assert_output --partial "my-app-dev-db-sg"
 }
 
+# Autoscaling Tests
+
+@test "validate_autoscaling_config succeeds with valid storage settings" {
+    export DB_STORAGE_AUTOSCALING_ENABLED="true"
+    export DB_ALLOCATED_STORAGE="20"
+    export DB_MAX_ALLOCATED_STORAGE="100"
+    run validate_autoscaling_config
+    [ "$status" -eq 0 ]
+    assert_output --partial "Storage autoscaling validation passed"
+}
+
+@test "validate_autoscaling_config fails when max storage is less than current" {
+    export DB_STORAGE_AUTOSCALING_ENABLED="true"
+    export DB_ALLOCATED_STORAGE="100"
+    export DB_MAX_ALLOCATED_STORAGE="50"
+    run validate_autoscaling_config
+    [ "$status" -eq 1 ]
+    assert_output --partial "must be greater than DB_ALLOCATED_STORAGE"
+}
+
+@test "validate_autoscaling_config succeeds with valid read replica settings" {
+    export DB_READ_REPLICA_ENABLED="true"
+    export DB_READ_REPLICA_MIN_CAPACITY="1"
+    export DB_READ_REPLICA_MAX_CAPACITY="3"
+    export DB_READ_REPLICA_COUNT="2"
+    run validate_autoscaling_config
+    [ "$status" -eq 0 ]
+    assert_output --partial "Read replica validation passed"
+}
+
+@test "validate_autoscaling_config fails when min capacity exceeds max" {
+    export DB_READ_REPLICA_ENABLED="true"
+    export DB_READ_REPLICA_MIN_CAPACITY="5"
+    export DB_READ_REPLICA_MAX_CAPACITY="3"
+    export DB_READ_REPLICA_COUNT="4"
+    run validate_autoscaling_config
+    [ "$status" -eq 1 ]
+    assert_output --partial "cannot be greater than"
+}
+
+@test "validate_autoscaling_config fails when initial count out of range" {
+    export DB_READ_REPLICA_ENABLED="true"
+    export DB_READ_REPLICA_MIN_CAPACITY="1"
+    export DB_READ_REPLICA_MAX_CAPACITY="3"
+    export DB_READ_REPLICA_COUNT="5"
+    run validate_autoscaling_config
+    [ "$status" -eq 1 ]
+    assert_output --partial "must be between min"
+}
+
+@test "enable_storage_autoscaling_if_needed configures autoscaling for existing db" {
+    export DB_STORAGE_AUTOSCALING_ENABLED="true"
+    export DB_MAX_ALLOCATED_STORAGE="100"
+    run enable_storage_autoscaling_if_needed "test-app-test-env-db"
+    [ "$status" -eq 0 ]
+    assert_output --partial "Storage autoscaling"
+}
+
+@test "enable_storage_autoscaling_if_needed skips when disabled" {
+    export DB_STORAGE_AUTOSCALING_ENABLED="false"
+    run enable_storage_autoscaling_if_needed "test-app-test-env-db"
+    [ "$status" -eq 0 ]
+    assert_output --partial "Storage autoscaling is disabled"
+}
+
+@test "create_or_update_read_replicas skips when disabled" {
+    export DB_READ_REPLICA_ENABLED="false"
+    run create_or_update_read_replicas "test-app-test-env-db"
+    [ "$status" -eq 0 ]
+    assert_output --partial "Read replicas are disabled"
+}
+
+@test "create_or_update_read_replicas creates replicas when enabled" {
+    export DB_READ_REPLICA_ENABLED="true"
+    export DB_READ_REPLICA_COUNT="2"
+    run create_or_update_read_replicas "test-app-test-env-db"
+    [ "$status" -eq 0 ]
+    assert_output --partial "Creating"
+    assert_output --partial "read replica"
+}
+
+@test "create_or_update_read_replicas skips when count already met" {
+    export DB_READ_REPLICA_ENABLED="true"
+    export DB_READ_REPLICA_COUNT="1"
+    run create_or_update_read_replicas "test-app-test-env-db"
+    [ "$status" -eq 0 ]
+}
+
+@test "configure_read_replica_autoscaling skips when replicas disabled" {
+    export DB_READ_REPLICA_ENABLED="false"
+    run configure_read_replica_autoscaling "test-app-test-env-db"
+    [ "$status" -eq 0 ]
+    assert_output --partial "Read replicas are disabled"
+}
+
+@test "configure_read_replica_autoscaling configures when enabled" {
+    export DB_READ_REPLICA_ENABLED="true"
+    export DB_READ_REPLICA_MIN_CAPACITY="1"
+    export DB_READ_REPLICA_MAX_CAPACITY="3"
+    export DB_READ_REPLICA_TARGET_CPU="70"
+    run configure_read_replica_autoscaling "test-app-test-env-db"
+    [ "$status" -eq 0 ]
+    assert_output --partial "Configuring autoscaling"
+    assert_output --partial "Min replicas: 1"
+    assert_output --partial "Max replicas: 3"
+}
+
+@test "main with storage autoscaling enabled shows config" {
+    export DB_STORAGE_AUTOSCALING_ENABLED="true"
+    export DB_MAX_ALLOCATED_STORAGE="200"
+    run main
+    [ "$status" -eq 0 ]
+    assert_output --partial "Storage Autoscaling: Enabled"
+    assert_output --partial "200GB"
+}
+
+@test "main with storage autoscaling disabled shows disabled" {
+    export DB_STORAGE_AUTOSCALING_ENABLED="false"
+    run main
+    [ "$status" -eq 0 ]
+    assert_output --partial "Storage Autoscaling: Disabled"
+}
+
+@test "main with read replicas enabled shows replica count" {
+    export DB_READ_REPLICA_ENABLED="true"
+    export DB_READ_REPLICA_COUNT="2"
+    export DB_READ_REPLICA_MIN_CAPACITY="1"
+    export DB_READ_REPLICA_MAX_CAPACITY="5"
+    run main
+    [ "$status" -eq 0 ]
+    assert_output --partial "Read Replicas:"
+    assert_output --partial "autoscaling: 1-5"
+}
+
+@test "main with read replicas disabled shows disabled" {
+    export DB_READ_REPLICA_ENABLED="false"
+    run main
+    [ "$status" -eq 0 ]
+    assert_output --partial "Read Replicas: Disabled"
+}
+
+@test "idempotency: storage autoscaling is preserved on re-run" {
+    export DB_STORAGE_AUTOSCALING_ENABLED="true"
+    export DB_MAX_ALLOCATED_STORAGE="100"
+    export DB_INSTANCE_CLASS="db.t3.micro"
+    export DB_ENGINE="postgres"
+    export DB_MULTI_AZ="true"
+    
+    run main
+    [ "$status" -eq 0 ]
+    
+    run main
+    [ "$status" -eq 0 ]
+    assert_output --partial "Storage autoscaling"
+}
+

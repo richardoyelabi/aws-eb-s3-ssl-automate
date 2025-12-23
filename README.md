@@ -6,6 +6,7 @@ A somewhat opinionated, comprehensive shell script automation tool that provisio
 
 - **Automated EB Environment Creation**: Creates and configures Elastic Beanstalk application and environment
 - **RDS Database Integration**: PostgreSQL RDS instance with Multi-AZ deployment and automated backups
+- **Database Autoscaling**: Storage autoscaling and read replica autoscaling for handling variable workloads
 - **Dual S3 Buckets**: Sets up separate buckets for static assets (read-only) and file uploads (full access)
 - **SSL/HTTPS Configuration**: Integrates with AWS Certificate Manager for HTTPS support
 - **Custom Domain Configuration**: Supports custom domains and subdomains with optional Route 53 automation
@@ -703,6 +704,8 @@ The automation creates a PostgreSQL RDS instance with the following features:
 - **Private access only** (not publicly accessible)
 - **Security group** allowing access only from EB instances
 - **Secrets Manager** for secure password storage
+- **Storage autoscaling** to automatically grow storage as needed
+- **Read replica autoscaling** for handling variable read traffic
 
 ### Database Settings
 
@@ -725,6 +728,17 @@ DB_MAINTENANCE_WINDOW="mon:04:00-mon:05:00"      # Maintenance window
 DB_STORAGE_ENCRYPTED="true"                      # Enable encryption
 DB_PUBLICLY_ACCESSIBLE="false"                   # Public access (keep false)
 DB_SKIP_FINAL_SNAPSHOT="false"                   # Skip final snapshot on delete
+
+# Database Autoscaling Configuration
+DB_STORAGE_AUTOSCALING_ENABLED="true"            # Enable storage autoscaling
+DB_MAX_ALLOCATED_STORAGE="100"                   # Maximum storage limit in GB
+DB_READ_REPLICA_ENABLED="false"                  # Enable read replicas
+DB_READ_REPLICA_COUNT="1"                        # Initial number of replicas
+DB_READ_REPLICA_MIN_CAPACITY="1"                 # Minimum replicas
+DB_READ_REPLICA_MAX_CAPACITY="3"                 # Maximum replicas
+DB_READ_REPLICA_TARGET_CPU="70"                  # Target CPU % for scaling
+DB_READ_REPLICA_SCALE_IN_COOLDOWN="300"          # Scale-in cooldown (seconds)
+DB_READ_REPLICA_SCALE_OUT_COOLDOWN="60"          # Scale-out cooldown (seconds)
 ```
 
 ### Database Connection
@@ -748,6 +762,24 @@ If `DB_MASTER_PASSWORD` is left empty, a secure password will be automatically g
 
 This password is automatically retrieved and configured in your EB environment during setup.
 
+### Autoscaling
+
+The database supports two types of autoscaling:
+
+**Storage Autoscaling:**
+- Automatically increases storage when running low on disk space
+- Grows up to `DB_MAX_ALLOCATED_STORAGE` limit
+- No downtime during scaling
+- Prevents storage-full errors
+
+**Read Replica Autoscaling:**
+- Automatically scales read replicas based on CPU utilization
+- Adjusts between `DB_READ_REPLICA_MIN_CAPACITY` and `DB_READ_REPLICA_MAX_CAPACITY`
+- Ideal for handling variable read traffic
+- Cost-effective scaling for read-heavy workloads
+
+To enable read replicas, set `DB_READ_REPLICA_ENABLED="true"` in `config.env`.
+
 ### Security Considerations
 
 - The database is created in the same VPC as your EB environment
@@ -756,7 +788,7 @@ This password is automatically retrieved and configured in your EB environment d
 - Storage is encrypted at rest
 - Passwords are never stored in plain text in configuration files
 
-For detailed database management, see [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md).
+For detailed database management, scaling strategies, and monitoring, see [DATABASE_SETUP.md](DATABASE_SETUP.md).
 
 ## Deployment
 

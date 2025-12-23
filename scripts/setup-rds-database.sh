@@ -23,6 +23,40 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+# Validates autoscaling configuration parameters
+# Returns: 0 on success, exits on validation failure
+validate_autoscaling_config() {
+    if [ "${DB_STORAGE_AUTOSCALING_ENABLED:-true}" = "true" ]; then
+        local max_storage="${DB_MAX_ALLOCATED_STORAGE:-100}"
+        local current_storage="${DB_ALLOCATED_STORAGE:-20}"
+        
+        if [ "$max_storage" -le "$current_storage" ]; then
+            log_error "DB_MAX_ALLOCATED_STORAGE ($max_storage GB) must be greater than DB_ALLOCATED_STORAGE ($current_storage GB)"
+            exit 1
+        fi
+        
+        log_info "Storage autoscaling validation passed: $current_storage GB -> max $max_storage GB"
+    fi
+    
+    if [ "${DB_READ_REPLICA_ENABLED:-false}" = "true" ]; then
+        local min_replicas="${DB_READ_REPLICA_MIN_CAPACITY:-1}"
+        local max_replicas="${DB_READ_REPLICA_MAX_CAPACITY:-3}"
+        local initial_count="${DB_READ_REPLICA_COUNT:-1}"
+        
+        if [ "$min_replicas" -gt "$max_replicas" ]; then
+            log_error "DB_READ_REPLICA_MIN_CAPACITY ($min_replicas) cannot be greater than DB_READ_REPLICA_MAX_CAPACITY ($max_replicas)"
+            exit 1
+        fi
+        
+        if [ "$initial_count" -lt "$min_replicas" ] || [ "$initial_count" -gt "$max_replicas" ]; then
+            log_error "DB_READ_REPLICA_COUNT ($initial_count) must be between min ($min_replicas) and max ($max_replicas)"
+            exit 1
+        fi
+        
+        log_info "Read replica validation passed: initial=$initial_count, range=$min_replicas-$max_replicas"
+    fi
+}
+
 # Generates or retrieves database master password
 # Idempotent: Checks if password already exists in Secrets Manager
 # Returns: Password string (auto-generated or from config)
@@ -400,6 +434,60 @@ check_existing_db_instance() {
     fi
 }
 
+# Enables storage autoscaling on existing database instance
+# Idempotent: Checks if autoscaling is already configured
+# Parameters:
+#   $1 - db_instance_identifier
+# Returns: 0 on success
+enable_storage_autoscaling_if_needed() {
+    local db_identifier=$1
+    
+    if [ "${DB_STORAGE_AUTOSCALING_ENABLED:-true}" != "true" ]; then
+        log_info "Storage autoscaling is disabled, skipping"
+        return 0
+    fi
+    
+    log_info "Checking storage autoscaling configuration..."
+    
+    local max_storage=$(aws rds describe-db-instances \
+        --db-instance-identifier "$db_identifier" \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        --query "DBInstances[0].MaxAllocatedStorage" \
+        --output text 2>/dev/null || echo "")
+    
+    local desired_max="${DB_MAX_ALLOCATED_STORAGE:-100}"
+    
+    if [ -z "$max_storage" ] || [ "$max_storage" = "None" ] || [ "$max_storage" = "null" ]; then
+        log_info "Storage autoscaling not configured, enabling..."
+        
+        aws rds modify-db-instance \
+            --db-instance-identifier "$db_identifier" \
+            --max-allocated-storage "$desired_max" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --apply-immediately \
+            > /dev/null
+        
+        log_info "Storage autoscaling enabled: max ${desired_max}GB"
+    elif [ "$max_storage" != "$desired_max" ]; then
+        log_warn "Storage autoscaling is configured but max differs: current=${max_storage}GB, desired=${desired_max}GB"
+        log_info "Updating max allocated storage to ${desired_max}GB..."
+        
+        aws rds modify-db-instance \
+            --db-instance-identifier "$db_identifier" \
+            --max-allocated-storage "$desired_max" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --apply-immediately \
+            > /dev/null
+        
+        log_info "Storage autoscaling updated"
+    else
+        log_info "Storage autoscaling already configured correctly: max ${max_storage}GB"
+    fi
+}
+
 # Creates or updates DB instance
 # Idempotent: Checks existing state before creating/updating
 # Parameters:
@@ -419,6 +507,7 @@ create_or_update_db_instance() {
     if [[ $status == "EXISTS_MATCHES" ]]; then
         log_info "DB instance already exists and is correctly configured"
         log_info "Skipping DB instance creation"
+        enable_storage_autoscaling_if_needed "$db_identifier"
         return 0
     elif [[ $status == EXISTS_DIFFERS:* ]]; then
         log_warn "DB instance exists but configuration differs"
@@ -426,6 +515,7 @@ create_or_update_db_instance() {
         log_warn "  - Instance class changes (requires downtime)"
         log_warn "  - Multi-AZ enablement (can be done online)"
         log_info "Continuing with existing instance..."
+        enable_storage_autoscaling_if_needed "$db_identifier"
         return 0
     fi
     
@@ -438,30 +528,43 @@ create_or_update_db_instance() {
     log_info "  Backup retention: $DB_BACKUP_RETENTION_DAYS days"
     log_info "  Encrypted: $DB_STORAGE_ENCRYPTED"
     
-    # Create DB instance
-    aws rds create-db-instance \
-        --db-instance-identifier "$db_identifier" \
-        --db-instance-class "$DB_INSTANCE_CLASS" \
-        --engine "$DB_ENGINE" \
-        --engine-version "$DB_ENGINE_VERSION" \
-        --master-username "$DB_USERNAME" \
-        --master-user-password "$master_password" \
-        --allocated-storage "$DB_ALLOCATED_STORAGE" \
-        --storage-type "$DB_STORAGE_TYPE" \
-        --db-name "$DB_NAME" \
-        --db-subnet-group-name "$subnet_group" \
-        --vpc-security-group-ids "$security_group" \
+    if [ "${DB_STORAGE_AUTOSCALING_ENABLED:-true}" = "true" ]; then
+        log_info "  Storage autoscaling: enabled (max: ${DB_MAX_ALLOCATED_STORAGE:-100}GB)"
+    else
+        log_info "  Storage autoscaling: disabled"
+    fi
+    
+    # Build create-db-instance command
+    local create_cmd="aws rds create-db-instance \
+        --db-instance-identifier \"$db_identifier\" \
+        --db-instance-class \"$DB_INSTANCE_CLASS\" \
+        --engine \"$DB_ENGINE\" \
+        --engine-version \"$DB_ENGINE_VERSION\" \
+        --master-username \"$DB_USERNAME\" \
+        --master-user-password \"$master_password\" \
+        --allocated-storage \"$DB_ALLOCATED_STORAGE\" \
+        --storage-type \"$DB_STORAGE_TYPE\" \
+        --db-name \"$DB_NAME\" \
+        --db-subnet-group-name \"$subnet_group\" \
+        --vpc-security-group-ids \"$security_group\" \
         --multi-az \
-        --backup-retention-period "$DB_BACKUP_RETENTION_DAYS" \
-        --preferred-backup-window "$DB_BACKUP_WINDOW" \
-        --preferred-maintenance-window "$DB_MAINTENANCE_WINDOW" \
+        --backup-retention-period \"$DB_BACKUP_RETENTION_DAYS\" \
+        --preferred-backup-window \"$DB_BACKUP_WINDOW\" \
+        --preferred-maintenance-window \"$DB_MAINTENANCE_WINDOW\" \
         --storage-encrypted \
         --publicly-accessible \
-        --enable-cloudwatch-logs-exports postgresql upgrade \
-        --tags Key=Application,Value="$APP_NAME" Key=Environment,Value="$ENV_NAME" Key=Name,Value="$db_identifier" \
-        --profile "$AWS_PROFILE" \
-        --region "$AWS_REGION" \
-        > /dev/null
+        --enable-cloudwatch-logs-exports postgresql upgrade"
+    
+    if [ "${DB_STORAGE_AUTOSCALING_ENABLED:-true}" = "true" ]; then
+        create_cmd="$create_cmd --max-allocated-storage \"${DB_MAX_ALLOCATED_STORAGE:-100}\""
+    fi
+    
+    create_cmd="$create_cmd \
+        --tags Key=Application,Value=\"$APP_NAME\" Key=Environment,Value=\"$ENV_NAME\" Key=Name,Value=\"$db_identifier\" \
+        --profile \"$AWS_PROFILE\" \
+        --region \"$AWS_REGION\""
+    
+    eval "$create_cmd > /dev/null"
     
     log_info "DB instance creation initiated"
     log_info "Waiting for DB instance to become available (this may take 5-10 minutes)..."
@@ -473,6 +576,151 @@ create_or_update_db_instance() {
         --region "$AWS_REGION"
     
     log_info "DB instance is now available"
+}
+
+# Creates or updates read replicas for the database instance
+# Idempotent: Checks if read replicas exist before creating
+# Parameters:
+#   $1 - db_instance_identifier (primary)
+# Returns: 0 on success
+create_or_update_read_replicas() {
+    local primary_db_identifier=$1
+    
+    if [ "${DB_READ_REPLICA_ENABLED:-false}" != "true" ]; then
+        log_info "Read replicas are disabled, skipping"
+        return 0
+    fi
+    
+    local replica_count="${DB_READ_REPLICA_COUNT:-1}"
+    log_info "Checking read replica configuration (target: $replica_count replica(s))..."
+    
+    local existing_replicas=$(aws rds describe-db-instances \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        --query "DBInstances[?ReadReplicaSourceDBInstanceIdentifier=='$primary_db_identifier'].DBInstanceIdentifier" \
+        --output text 2>/dev/null || echo "")
+    
+    local existing_count=0
+    if [ -n "$existing_replicas" ] && [ "$existing_replicas" != "None" ]; then
+        existing_count=$(echo "$existing_replicas" | wc -w)
+    fi
+    
+    log_info "Found $existing_count existing read replica(s)"
+    
+    if [ "$existing_count" -ge "$replica_count" ]; then
+        log_info "Read replica count meets or exceeds target, skipping creation"
+        return 0
+    fi
+    
+    local replicas_to_create=$((replica_count - existing_count))
+    log_info "Creating $replicas_to_create additional read replica(s)..."
+    
+    for i in $(seq 1 "$replicas_to_create"); do
+        local replica_number=$((existing_count + i))
+        local replica_identifier="${primary_db_identifier}-replica-${replica_number}"
+        
+        log_info "Creating read replica: $replica_identifier"
+        
+        aws rds create-db-instance-read-replica \
+            --db-instance-identifier "$replica_identifier" \
+            --source-db-instance-identifier "$primary_db_identifier" \
+            --db-instance-class "$DB_INSTANCE_CLASS" \
+            --publicly-accessible \
+            --tags Key=Application,Value="$APP_NAME" Key=Environment,Value="$ENV_NAME" Key=Name,Value="$replica_identifier" Key=Type,Value="ReadReplica" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            > /dev/null
+        
+        log_info "Read replica creation initiated: $replica_identifier"
+    done
+    
+    log_info "Waiting for read replicas to become available..."
+    
+    for i in $(seq 1 "$replicas_to_create"); do
+        local replica_number=$((existing_count + i))
+        local replica_identifier="${primary_db_identifier}-replica-${replica_number}"
+        
+        aws rds wait db-instance-available \
+            --db-instance-identifier "$replica_identifier" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION"
+        
+        log_info "Read replica available: $replica_identifier"
+    done
+    
+    log_info "All read replicas are now available"
+}
+
+# Configures autoscaling for read replicas
+# Idempotent: Checks if autoscaling is already configured
+# Parameters:
+#   $1 - db_instance_identifier (primary)
+# Returns: 0 on success
+configure_read_replica_autoscaling() {
+    local primary_db_identifier=$1
+    
+    if [ "${DB_READ_REPLICA_ENABLED:-false}" != "true" ]; then
+        log_info "Read replicas are disabled, skipping autoscaling configuration"
+        return 0
+    fi
+    
+    log_info "Configuring autoscaling for read replicas..."
+    
+    local min_capacity="${DB_READ_REPLICA_MIN_CAPACITY:-1}"
+    local max_capacity="${DB_READ_REPLICA_MAX_CAPACITY:-3}"
+    local target_cpu="${DB_READ_REPLICA_TARGET_CPU:-70}"
+    local scale_in_cooldown="${DB_READ_REPLICA_SCALE_IN_COOLDOWN:-300}"
+    local scale_out_cooldown="${DB_READ_REPLICA_SCALE_OUT_COOLDOWN:-60}"
+    
+    local resource_id="db:${primary_db_identifier}"
+    local policy_name="${primary_db_identifier}-cpu-autoscaling"
+    
+    log_info "Autoscaling configuration:"
+    log_info "  Min replicas: $min_capacity"
+    log_info "  Max replicas: $max_capacity"
+    log_info "  Target CPU: ${target_cpu}%"
+    log_info "  Scale-in cooldown: ${scale_in_cooldown}s"
+    log_info "  Scale-out cooldown: ${scale_out_cooldown}s"
+    
+    log_info "Registering scalable target..."
+    
+    aws application-autoscaling register-scalable-target \
+        --service-namespace rds \
+        --resource-id "$resource_id" \
+        --scalable-dimension rds:replica:ReadReplicaCount \
+        --min-capacity "$min_capacity" \
+        --max-capacity "$max_capacity" \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        2>/dev/null || log_warn "Scalable target may already be registered"
+    
+    log_info "Creating target tracking scaling policy..."
+    
+    cat > /tmp/scaling-policy-config.json <<EOF
+{
+    "TargetValue": ${target_cpu}.0,
+    "PredefinedMetricSpecification": {
+        "PredefinedMetricType": "RDSReaderAverageCPUUtilization"
+    },
+    "ScaleInCooldown": ${scale_in_cooldown},
+    "ScaleOutCooldown": ${scale_out_cooldown}
+}
+EOF
+    
+    aws application-autoscaling put-scaling-policy \
+        --service-namespace rds \
+        --resource-id "$resource_id" \
+        --scalable-dimension rds:replica:ReadReplicaCount \
+        --policy-name "$policy_name" \
+        --policy-type TargetTrackingScaling \
+        --target-tracking-scaling-policy-configuration file:///tmp/scaling-policy-config.json \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        > /dev/null
+    
+    rm -f /tmp/scaling-policy-config.json
+    
+    log_info "Read replica autoscaling configured successfully"
 }
 
 # Updates EB environment with database connection details
@@ -588,6 +836,9 @@ main() {
     local subnet_group_name="${APP_NAME}-${ENV_NAME}-db-subnet-group"
     local security_group_name="${APP_NAME}-${ENV_NAME}-db-sg"
     
+    # Validate autoscaling configuration
+    validate_autoscaling_config
+    
     # Verify EB environment exists
     log_info "Verifying Elastic Beanstalk environment exists..."
     
@@ -622,6 +873,12 @@ main() {
     # Create or verify DB instance
     create_or_update_db_instance "$db_identifier" "$master_password" "$subnet_group_name" "$db_sg_id"
     
+    # Create read replicas if enabled
+    create_or_update_read_replicas "$db_identifier"
+    
+    # Configure autoscaling for read replicas
+    configure_read_replica_autoscaling "$db_identifier"
+    
     # Update EB environment variables
     update_eb_environment_variables "$db_identifier" "$master_password"
     
@@ -631,11 +888,34 @@ main() {
     log_info "  Instance ID: $db_identifier"
     log_info "  Subnet Group: $subnet_group_name"
     log_info "  Security Group: $db_sg_id"
+    
+    if [ "${DB_STORAGE_AUTOSCALING_ENABLED:-true}" = "true" ]; then
+        log_info "  Storage Autoscaling: Enabled (max: ${DB_MAX_ALLOCATED_STORAGE:-100}GB)"
+    else
+        log_info "  Storage Autoscaling: Disabled"
+    fi
+    
+    if [ "${DB_READ_REPLICA_ENABLED:-false}" = "true" ]; then
+        local replica_count=$(aws rds describe-db-instances \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --query "DBInstances[?ReadReplicaSourceDBInstanceIdentifier=='$db_identifier'].DBInstanceIdentifier" \
+            --output text 2>/dev/null | wc -w)
+        log_info "  Read Replicas: $replica_count (autoscaling: ${DB_READ_REPLICA_MIN_CAPACITY:-1}-${DB_READ_REPLICA_MAX_CAPACITY:-3})"
+    else
+        log_info "  Read Replicas: Disabled"
+    fi
+    
     log_info ""
     log_info "Next steps:"
     log_info "  1. Deploy your application to Elastic Beanstalk"
     log_info "  2. Run database migrations from your application"
     log_info "  3. Test database connectivity"
+    
+    if [ "${DB_READ_REPLICA_ENABLED:-false}" = "true" ]; then
+        log_info "  4. Configure your application to use read replicas for read-heavy operations"
+        log_info "  5. Monitor CPU utilization to verify autoscaling triggers"
+    fi
 }
 
 # Only run main if executed directly (not sourced)
