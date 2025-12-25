@@ -49,10 +49,11 @@ create_s3_access_policy() {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "StaticAssetsReadAccess",
+      "Sid": "StaticAssetsAccess",
       "Effect": "Allow",
       "Action": [
         "s3:GetObject",
+        "s3:PutObject",
         "s3:ListBucket"
       ],
       "Resource": [

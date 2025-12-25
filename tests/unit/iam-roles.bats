@@ -27,6 +27,7 @@ teardown() {
     assert_output --partial "test-static"
     assert_output --partial "test-uploads"
     assert_output --partial "s3:GetObject"
+    assert_output --partial "s3:PutObject"
 }
 
 @test "create_iam_role creates new role" {
