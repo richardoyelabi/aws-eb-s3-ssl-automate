@@ -795,6 +795,31 @@ update_eb_environment_variables() {
         "Namespace": "aws:elasticbeanstalk:application:environment",
         "OptionName": "DB_PASSWORD",
         "Value": "${master_password}"
+    },
+    {
+        "Namespace": "aws:elasticbeanstalk:application:environment",
+        "OptionName": "STATIC_ASSETS_BUCKET",
+        "Value": "${STATIC_ASSETS_BUCKET}"
+    },
+    {
+        "Namespace": "aws:elasticbeanstalk:application:environment",
+        "OptionName": "UPLOADS_BUCKET",
+        "Value": "${UPLOADS_BUCKET}"
+    },
+    {
+        "Namespace": "aws:elasticbeanstalk:application:environment",
+        "OptionName": "AWS_REGION",
+        "Value": "${AWS_REGION}"
+    },
+    {
+        "Namespace": "aws:elasticbeanstalk:application:environment",
+        "OptionName": "AWS_DEFAULT_REGION",
+        "Value": "${AWS_REGION}"
+    },
+    {
+        "Namespace": "aws:elasticbeanstalk:application:environment",
+        "OptionName": "S3_REGION",
+        "Value": "${AWS_REGION}"
     }
 ]
 EOF

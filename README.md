@@ -813,15 +813,36 @@ eb deploy my-app-prod
 
 Your application will have access to these environment variables:
 
+**S3 Configuration:**
 - `STATIC_ASSETS_BUCKET`: Name of the static assets S3 bucket
 - `UPLOADS_BUCKET`: Name of the uploads S3 bucket
+- `AWS_REGION`: AWS region where resources are located
+- `AWS_DEFAULT_REGION`: Standard AWS SDK environment variable for region
+- `S3_REGION`: Explicit S3 region (alias for AWS_REGION)
+
+**Database Configuration:**
 - `DATABASE_URL`: PostgreSQL connection string (e.g., `postgresql://user:pass@host:port/dbname`)
 - `DB_HOST`: Database endpoint hostname
 - `DB_PORT`: Database port (default: 5432)
 - `DB_NAME`: Database name
 - `DB_USERNAME`: Database username
 - `DB_PASSWORD`: Database password
-- `AWS_REGION`: AWS region where resources are located
+
+#### S3 Credentials and Authentication
+
+**Important:** S3 access credentials (access key ID and secret access key) are **NOT** stored as environment variables. This infrastructure uses IAM instance roles, which is the AWS security best practice.
+
+**How It Works:**
+1. Your EC2 instances are assigned an IAM instance role with S3 permissions
+2. The AWS SDK automatically detects it's running on EC2
+3. Temporary credentials are retrieved from the EC2 instance metadata service
+4. Credentials are automatically rotated before expiration
+
+**What This Means:**
+- No access keys to manage or rotate manually
+- No risk of credential exposure in environment variables or code
+- AWS SDK automatically handles authentication
+- Your application code simply uses the AWS SDK without explicit credentials
 
 ### Example Application Code
 
@@ -832,6 +853,7 @@ import os
 import boto3
 
 # Initialize S3 client
+# No credentials needed - AWS SDK automatically uses IAM instance role
 s3 = boto3.client("s3", region_name=os.environ["AWS_REGION"])
 
 # Upload a file
@@ -852,11 +874,13 @@ url = s3.generate_presigned_url(
 )
 ```
 
-**Node.js (using AWS SDK):**
+**Node.js (using AWS SDK v2):**
 
 ```javascript
 const AWS = require("aws-sdk");
 
+// Initialize S3 client
+// No credentials needed - AWS SDK automatically uses IAM instance role
 const s3 = new AWS.S3({
   region: process.env.AWS_REGION
 });
@@ -869,6 +893,7 @@ const uploadParams = {
 };
 
 s3.upload(uploadParams, (err, data) => {
+  if (err) throw err;
   console.log(data.Location);
 });
 
@@ -879,8 +904,38 @@ const getParams = {
 };
 
 s3.getObject(getParams, (err, data) => {
+  if (err) throw err;
   console.log(data.Body);
 });
+```
+
+**Node.js (using AWS SDK v3):**
+
+```javascript
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+
+// Initialize S3 client
+// No credentials needed - AWS SDK automatically uses IAM instance role
+const s3Client = new S3Client({ region: process.env.AWS_REGION });
+
+// Upload a file
+const uploadCommand = new PutObjectCommand({
+  Bucket: process.env.UPLOADS_BUCKET,
+  Key: "uploads/file.jpg",
+  Body: fileBuffer
+});
+
+const uploadResult = await s3Client.send(uploadCommand);
+console.log(uploadResult);
+
+// Get object
+const getCommand = new GetObjectCommand({
+  Bucket: process.env.STATIC_ASSETS_BUCKET,
+  Key: "static/image.jpg"
+});
+
+const getResult = await s3Client.send(getCommand);
+console.log(getResult.Body);
 ```
 
 ## Managing Your Environment

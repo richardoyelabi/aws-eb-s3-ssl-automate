@@ -125,6 +125,16 @@ create_environment_options() {
     "Namespace": "aws:elasticbeanstalk:application:environment",
     "OptionName": "AWS_REGION",
     "Value": "$AWS_REGION"
+  },
+  {
+    "Namespace": "aws:elasticbeanstalk:application:environment",
+    "OptionName": "AWS_DEFAULT_REGION",
+    "Value": "$AWS_REGION"
+  },
+  {
+    "Namespace": "aws:elasticbeanstalk:application:environment",
+    "OptionName": "S3_REGION",
+    "Value": "$AWS_REGION"
   }
 ]
 EOF
@@ -193,6 +203,16 @@ update_environment_configuration() {
     if [ "$(compare_configuration "$current_config" "aws:elasticbeanstalk:application:environment" "UPLOADS_BUCKET" "$UPLOADS_BUCKET")" = "different" ]; then
         needs_update=true
         changes+=("UPLOADS_BUCKET env var")
+    fi
+    
+    if [ "$(compare_configuration "$current_config" "aws:elasticbeanstalk:application:environment" "AWS_DEFAULT_REGION" "$AWS_REGION")" = "different" ]; then
+        needs_update=true
+        changes+=("AWS_DEFAULT_REGION env var")
+    fi
+    
+    if [ "$(compare_configuration "$current_config" "aws:elasticbeanstalk:application:environment" "S3_REGION" "$AWS_REGION")" = "different" ]; then
+        needs_update=true
+        changes+=("S3_REGION env var")
     fi
     
     if [ "$needs_update" = false ]; then
