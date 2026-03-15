@@ -151,10 +151,7 @@ validate_storage_settings() {
     local has_errors=false
 
     # Validate allocated storage
-    if [ "$DB_ALLOCATED_STORAGE" -lt 20 ]; then
-        log_fail "Allocated storage too small: ${DB_ALLOCATED_STORAGE}GB (minimum: 20GB)"
-        has_errors=true
-    elif [ "$DB_ALLOCATED_STORAGE" -gt 65536 ]; then
+    if [ "$DB_ALLOCATED_STORAGE" -gt 65536 ]; then
         log_fail "Allocated storage too large: ${DB_ALLOCATED_STORAGE}GB (maximum: 65536GB)"
         has_errors=true
     else
