@@ -23,6 +23,14 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+# Strips control characters (newline, carriage return, tab, etc.) from input.
+# AWS RDS CreateDBInstance rejects parameters containing control characters.
+# Parameters: $1 - value to sanitize
+# Returns: sanitized value via stdout
+sanitize_rds_param() {
+    printf "%s" "$1" | tr -d '\000-\037'
+}
+
 # Validates autoscaling configuration parameters
 # Returns: 0 on success, exits on validation failure
 validate_autoscaling_config() {
@@ -66,7 +74,7 @@ generate_db_password() {
     # Check if password is provided in config
     if [ -n "$DB_MASTER_PASSWORD" ]; then
         log_info "Using database password from config.env"
-        echo "$DB_MASTER_PASSWORD"
+        sanitize_rds_param "$DB_MASTER_PASSWORD"
         return 0
     fi
     
@@ -84,21 +92,23 @@ generate_db_password() {
         log_info "Password already exists in Secrets Manager"
         log_info "Retrieving existing password..."
         
-        local password=$(aws secretsmanager get-secret-value \
+        local password
+        password=$(aws secretsmanager get-secret-value \
             --secret-id "$secret_name" \
             --profile "$AWS_PROFILE" \
             --region "$AWS_REGION" \
             --query "SecretString" \
             --output text)
-        
-        echo "$password"
+        sanitize_rds_param "$password"
         return 0
     fi
     
     log_info "Generating secure database password..."
     
     # Generate secure random password (32 chars, alphanumeric + special chars)
-    local password=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
+    # Strip control chars in case command substitution captures trailing newline
+    local password
+    password=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32 | tr -d '\000-\037')
     
     log_info "Storing password in AWS Secrets Manager..."
     
@@ -113,7 +123,7 @@ generate_db_password() {
     
     log_info "Password stored in Secrets Manager: $secret_name"
     
-    echo "$password"
+    sanitize_rds_param "$password"
 }
 
 # Gets VPC and subnets from Elastic Beanstalk environment
@@ -502,6 +512,27 @@ create_or_update_db_instance() {
     local subnet_group=$3
     local security_group=$4
     
+    # Sanitize all parameters to prevent AWS "control characters" error
+    db_identifier=$(sanitize_rds_param "$db_identifier")
+    master_password=$(sanitize_rds_param "$master_password")
+    subnet_group=$(sanitize_rds_param "$subnet_group")
+    security_group=$(sanitize_rds_param "$security_group")
+    local db_instance_class=$(sanitize_rds_param "${DB_INSTANCE_CLASS:-db.t3.micro}")
+    local db_engine=$(sanitize_rds_param "${DB_ENGINE:-postgres}")
+    local db_engine_version=$(sanitize_rds_param "${DB_ENGINE_VERSION}")
+    local db_username=$(sanitize_rds_param "${DB_USERNAME:-dbadmin}")
+    local db_name=$(sanitize_rds_param "${DB_NAME}")
+    local db_backup_window=$(sanitize_rds_param "${DB_BACKUP_WINDOW:-03:00-04:00}")
+    local db_maintenance_window=$(sanitize_rds_param "${DB_MAINTENANCE_WINDOW:-mon:04:00-mon:05:00}")
+    local app_name=$(sanitize_rds_param "${APP_NAME}")
+    local env_name=$(sanitize_rds_param "${ENV_NAME}")
+    local aws_profile=$(sanitize_rds_param "${AWS_PROFILE}")
+    local aws_region=$(sanitize_rds_param "${AWS_REGION}")
+    local db_allocated_storage=$(sanitize_rds_param "${DB_ALLOCATED_STORAGE:-20}")
+    local db_storage_type=$(sanitize_rds_param "${DB_STORAGE_TYPE:-gp3}")
+    local db_backup_retention_days=$(sanitize_rds_param "${DB_BACKUP_RETENTION_DAYS:-7}")
+    local db_max_allocated_storage=$(sanitize_rds_param "${DB_MAX_ALLOCATED_STORAGE:-100}")
+    
     local status=$(check_existing_db_instance "$db_identifier")
     
     if [[ $status == "EXISTS_MATCHES" ]]; then
@@ -534,35 +565,35 @@ create_or_update_db_instance() {
         log_info "  Storage autoscaling: disabled"
     fi
     
-    # Build create-db-instance command
+    # Build create-db-instance command (use sanitized vars to prevent control character errors)
     local create_cmd="aws rds create-db-instance \
         --db-instance-identifier \"$db_identifier\" \
-        --db-instance-class \"$DB_INSTANCE_CLASS\" \
-        --engine \"$DB_ENGINE\" \
-        --engine-version \"$DB_ENGINE_VERSION\" \
-        --master-username \"$DB_USERNAME\" \
+        --db-instance-class \"$db_instance_class\" \
+        --engine \"$db_engine\" \
+        --engine-version \"$db_engine_version\" \
+        --master-username \"$db_username\" \
         --master-user-password \"$master_password\" \
-        --allocated-storage \"$DB_ALLOCATED_STORAGE\" \
-        --storage-type \"$DB_STORAGE_TYPE\" \
-        --db-name \"$DB_NAME\" \
+        --allocated-storage \"$db_allocated_storage\" \
+        --storage-type \"$db_storage_type\" \
+        --db-name \"$db_name\" \
         --db-subnet-group-name \"$subnet_group\" \
         --vpc-security-group-ids \"$security_group\" \
         --multi-az \
-        --backup-retention-period \"$DB_BACKUP_RETENTION_DAYS\" \
-        --preferred-backup-window \"$DB_BACKUP_WINDOW\" \
-        --preferred-maintenance-window \"$DB_MAINTENANCE_WINDOW\" \
+        --backup-retention-period \"$db_backup_retention_days\" \
+        --preferred-backup-window \"$db_backup_window\" \
+        --preferred-maintenance-window \"$db_maintenance_window\" \
         --storage-encrypted \
         --publicly-accessible \
         --enable-cloudwatch-logs-exports postgresql"
-    
+
     if [ "${DB_STORAGE_AUTOSCALING_ENABLED:-true}" = "true" ]; then
-        create_cmd="$create_cmd --max-allocated-storage \"${DB_MAX_ALLOCATED_STORAGE:-100}\""
+        create_cmd="$create_cmd --max-allocated-storage \"$db_max_allocated_storage\""
     fi
-    
+
     create_cmd="$create_cmd \
-        --tags Key=Application,Value=\"$APP_NAME\" Key=Environment,Value=\"$ENV_NAME\" Key=Name,Value=\"$db_identifier\" \
-        --profile \"$AWS_PROFILE\" \
-        --region \"$AWS_REGION\""
+        --tags Key=Application,Value=\"$app_name\" Key=Environment,Value=\"$env_name\" Key=Name,Value=\"$db_identifier\" \
+        --profile \"$aws_profile\" \
+        --region \"$aws_region\""
     
     eval "$create_cmd > /dev/null"
     

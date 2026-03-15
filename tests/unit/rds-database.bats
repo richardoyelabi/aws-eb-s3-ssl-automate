@@ -12,6 +12,24 @@ teardown() {
     teardown_test_env
 }
 
+@test "sanitize_rds_param strips control characters" {
+    run sanitize_rds_param "password_with_newline"$'\n'
+    [ "$status" -eq 0 ]
+    [ "$output" = "password_with_newline" ]
+}
+
+@test "sanitize_rds_param strips carriage return" {
+    run sanitize_rds_param "value_with"$'\r'"cr"
+    [ "$status" -eq 0 ]
+    [ "$output" = "value_withcr" ]
+}
+
+@test "sanitize_rds_param preserves valid input" {
+    run sanitize_rds_param "valid-password-123"
+    [ "$status" -eq 0 ]
+    [ "$output" = "valid-password-123" ]
+}
+
 @test "generate_db_password uses password from config if provided" {
     export DB_MASTER_PASSWORD="my-custom-password"
     run generate_db_password

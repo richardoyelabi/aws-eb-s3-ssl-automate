@@ -565,6 +565,25 @@ View logs in CloudWatch Logs:
 
 ## Troubleshooting
 
+### "Input can't contain control characters" Error
+
+If you see `An error occurred (InvalidParameterValue) when calling the CreateDBInstance operation: The input isn't valid. Input can't contain control characters`:
+
+**Cause:** AWS RDS rejects parameters containing control characters (newlines, carriage returns, tabs). This can occur when:
+- `config.env` has Windows line endings (CRLF)
+- Passwords or config values were copied from a source that included hidden characters
+
+**Solution:** The setup script now sanitizes all parameters before passing them to the RDS API. If you still encounter this:
+
+1. Ensure `config.env` uses Unix line endings: `dos2unix config.env` or `sed -i 's/\r$//' config.env`
+2. If the error persists after updating the script, delete the stored secret so a fresh password is generated:
+   ```bash
+   aws secretsmanager delete-secret \
+     --secret-id "${APP_NAME}/${ENV_NAME}/db-password" \
+     --force-delete-without-recovery \
+     --profile "$AWS_PROFILE" --region "$AWS_REGION"
+   ```
+
 ### Cannot Connect to Database
 
 **Check security group rules:**
