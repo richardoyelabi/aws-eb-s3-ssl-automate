@@ -129,7 +129,7 @@ validate_instance_class() {
             --query "OrderableDBInstanceOptions[0].DBInstanceClass" \
             --output text 2>/dev/null | grep -q "$DB_INSTANCE_CLASS"; then
             log_warn "Instance class may not be available: $DB_INSTANCE_CLASS"
-            echo "  Verify with: aws rds describe-orderable-db-instance-options --engine $DB_ENGINE --region $AWS_REGION"
+            echo "  Verify with: aws rds describe-orderable-db-instance-options --engine $DB_ENGINE --engine-version $DB_ENGINE_VERSION --db-instance-class $DB_INSTANCE_CLASS --profile $AWS_PROFILE --region $AWS_REGION --query \"OrderableDBInstanceOptions[0].DBInstanceClass\" --output text"
             return 1
         fi
         
