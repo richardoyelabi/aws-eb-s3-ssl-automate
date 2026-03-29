@@ -90,7 +90,7 @@ EOF
 create_iam_role() {
     local role_name=$1
 
-    if aws iam get-role --role-name "$role_name" --profile "$AWS_PROFILE" 2>/dev/null; then
+    if aws iam get-role --role-name "$role_name" --profile "$AWS_PROFILE" &>/dev/null; then
         log_warn "IAM role $role_name already exists"
         return 0
     fi
@@ -149,7 +149,7 @@ create_and_attach_s3_policy() {
     local account_id=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query Account --output text)
     local policy_arn="arn:aws:iam::${account_id}:policy/${policy_name}"
 
-    if aws iam get-policy --policy-arn "$policy_arn" --profile "$AWS_PROFILE" 2>/dev/null; then
+    if aws iam get-policy --policy-arn "$policy_arn" --profile "$AWS_PROFILE" &>/dev/null; then
         log_info "Policy $policy_name already exists, checking if update needed"
         
         # Get current default version
@@ -241,7 +241,7 @@ create_instance_profile() {
 
     log_info "Creating instance profile: $profile_name"
 
-    if aws iam get-instance-profile --instance-profile-name "$profile_name" --profile "$AWS_PROFILE" 2>/dev/null; then
+    if aws iam get-instance-profile --instance-profile-name "$profile_name" --profile "$AWS_PROFILE" &>/dev/null; then
         log_warn "Instance profile $profile_name already exists"
         
         # Check if role is attached to the profile
@@ -302,7 +302,7 @@ main() {
         log_info "Adding S3 bucket policies to default role: aws-elasticbeanstalk-ec2-role"
         
         # Check if default role exists
-        if ! aws iam get-role --role-name "aws-elasticbeanstalk-ec2-role" --profile "$AWS_PROFILE" 2>/dev/null; then
+        if ! aws iam get-role --role-name "aws-elasticbeanstalk-ec2-role" --profile "$AWS_PROFILE" &>/dev/null; then
             log_warn "Default EB role doesn't exist. You may need to create it via EB console first"
             log_warn "Or set USE_DEFAULT_IAM_ROLE=false in config.env"
             exit 1

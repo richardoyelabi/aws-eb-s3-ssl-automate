@@ -120,6 +120,9 @@ teardown() {
     assert_output --partial "-c, --config FILE"
     assert_output --partial "--skip-ssl"
     assert_output --partial "--dry-run"
+    assert_output --partial "-y, --yes"
+    assert_output --partial "Non-interactive"
+    assert_output --partial "CI=true"
     assert_output --partial "EXAMPLES:"
     assert_output --partial "PREREQUISITES:"
     assert_output --partial "For more information, see README.md"
@@ -133,6 +136,15 @@ teardown() {
     assert_output --partial "--config FILE"
     assert_output --partial "--skip-ssl"
     assert_output --partial "--dry-run"
+    assert_output --partial "--yes"
+}
+
+@test "show_usage documents non-interactive example" {
+    run show_usage
+
+    [ "$status" -eq 0 ]
+    assert_output --partial "Unattended / CI"
+    assert_output --partial "--yes"
 }
 
 @test "show_usage includes examples" {

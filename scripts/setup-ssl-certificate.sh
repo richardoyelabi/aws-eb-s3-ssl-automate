@@ -158,13 +158,24 @@ validate_certificate() {
         
         # Display DNS validation records
         display_dns_validation_records "$cert_arn" "$region"
-        
-        # Skip interactive prompt in test mode
+
+        # Non-interactive before TEST_MODE so CI/--yes can run under mocked aws in unit tests
+        if [ "${NON_INTERACTIVE:-}" = "true" ]; then
+            echo ""
+            log_info "Non-interactive mode: waiting for certificate validation (poll every 30 seconds)..."
+            if wait_for_certificate_validation "$cert_arn" "$region" 60; then
+                return 0
+            else
+                log_error "Certificate validation failed or timed out"
+                return 1
+            fi
+        fi
+
         if [ "$TEST_MODE" = "true" ]; then
             log_info "Skipping interactive prompt in test mode"
             return 1
         fi
-        
+
         echo ""
         echo "What would you like to do?"
         echo "  1) Wait for validation (poll every 30 seconds)"
@@ -172,7 +183,7 @@ validate_certificate() {
         echo "  3) Skip SSL configuration for now"
         echo ""
         read -p "Enter your choice (1-3): " choice
-        
+
         case $choice in
             1)
                 echo ""

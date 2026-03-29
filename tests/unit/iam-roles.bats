@@ -43,6 +43,13 @@ teardown() {
     assert_output --partial "already exists"
 }
 
+@test "create_iam_role does not print raw get-role JSON to output" {
+    run create_iam_role "existing-role"
+    [ "$status" -eq 0 ]
+    refute_output --partial '"AssumeRolePolicyDocument"'
+    refute_output --partial '"Path": "/"'
+}
+
 @test "attach_managed_policies attaches policies" {
     run attach_managed_policies "test-role"
     [ "$status" -eq 0 ]

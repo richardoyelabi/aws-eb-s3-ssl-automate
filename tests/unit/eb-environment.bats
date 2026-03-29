@@ -82,6 +82,19 @@ teardown() {
     assert_output --partial "Skipping environment update"
 }
 
+@test "update_environment_configuration applies update in non-interactive mode" {
+    # NON_INTERACTIVE is evaluated before TEST_MODE so mocked aws can run update-environment in tests.
+    export INSTANCE_TYPE="t2.large"
+    export NON_INTERACTIVE=true
+    run update_environment_configuration "test-app" "test-env" "" "test-profile"
+    export INSTANCE_TYPE="t3.micro"
+    unset NON_INTERACTIVE
+
+    [ "$status" -eq 0 ]
+    assert_output --partial "Non-interactive mode: applying environment configuration update without confirmation"
+    assert_output --partial "Updating environment configuration"
+}
+
 @test "create_environment creates new environment" {
     export EB_PLATFORM="Python 3.11"
     run create_environment "test-app" "new-env" "Python" "" "test-profile"

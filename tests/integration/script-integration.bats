@@ -79,6 +79,12 @@ teardown() {
     [ "$db_index" -gt "$env_index" ]
 }
 
+@test "setup-eb-environment supports non-interactive mode and disables AWS CLI pager" {
+    grep -q 'export AWS_PAGER=""' "$SCRIPT_DIR/setup-eb-environment.sh"
+    grep -q "NON_INTERACTIVE" "$SCRIPT_DIR/setup-eb-environment.sh"
+    grep -Fq -- '-y|--yes)' "$SCRIPT_DIR/setup-eb-environment.sh"
+}
+
 @test "database configuration variables are available" {
     # Test that database configuration variables are set
     source "$SCRIPT_DIR/config.env"

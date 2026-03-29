@@ -73,6 +73,18 @@ teardown() {
     assert_output --partial "Skipping interactive prompt in test mode"
 }
 
+@test "validate_certificate non-interactive skips menu and waits for validation" {
+    export MOCK_ACM_CERT_STATUS="PENDING_VALIDATION"
+    export NON_INTERACTIVE=true
+    run validate_certificate "arn:aws:acm:us-east-1:123456789012:certificate/test" "us-east-1"
+    unset MOCK_ACM_CERT_STATUS
+    unset NON_INTERACTIVE
+
+    [ "$status" -eq 0 ]
+    assert_output --partial "pending validation"
+    assert_output --partial "Non-interactive mode: waiting for certificate validation"
+}
+
 @test "request_certificate_instructions displays instructions" {
     run request_certificate_instructions "example.com" "us-east-1"
     [ "$status" -eq 0 ]

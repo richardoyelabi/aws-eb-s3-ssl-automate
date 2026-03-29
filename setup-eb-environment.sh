@@ -214,6 +214,9 @@ OPTIONS:
     -c, --config FILE       Use custom configuration file (default: config.env)
     --skip-ssl              Skip SSL certificate validation and configuration
     --dry-run               Validate configuration without making changes
+    -y, --yes               Non-interactive: no confirmation prompts; apply EB
+                            config updates; wait for ACM validation when pending
+                            (also enabled when environment variable CI=true)
 
 EXAMPLES:
     # Standard setup
@@ -224,6 +227,9 @@ EXAMPLES:
 
     # Validate configuration only
     ./setup-eb-environment.sh --dry-run
+
+    # Unattended / CI (no prompts, no AWS CLI pager on JSON output)
+    ./setup-eb-environment.sh --yes
 
 PREREQUISITES:
     - AWS CLI installed and configured
@@ -238,6 +244,7 @@ EOF
 main() {
     local skip_ssl=false
     local dry_run=false
+    local assume_yes=false
     local config_file="$SCRIPT_DIR/config.env"
 
     # Parse command line arguments
@@ -259,6 +266,10 @@ main() {
                 dry_run=true
                 shift
                 ;;
+            -y|--yes)
+                assume_yes=true
+                shift
+                ;;
             *)
                 log_error "Unknown option: $1"
                 show_usage
@@ -266,6 +277,13 @@ main() {
                 ;;
         esac
     done
+
+    # Avoid AWS CLI v2 paging JSON into less (blocks unattended runs)
+    export AWS_PAGER=""
+
+    if [ "$assume_yes" = true ] || [ "${CI:-}" = "true" ]; then
+        export NON_INTERACTIVE=true
+    fi
 
     # Display banner
     echo ""
@@ -296,11 +314,15 @@ main() {
     # Confirm before proceeding
     echo ""
     log_warn "This script will create AWS resources that may incur costs."
-    read -p "Do you want to continue? (yes/no): " -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        log_info "Setup cancelled by user"
-        exit 0
+    if [ "${NON_INTERACTIVE:-}" = "true" ]; then
+        log_info "Non-interactive mode: continuing without confirmation (--yes, -y, or CI=true)"
+    else
+        read -p "Do you want to continue? (yes/no): " -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+            log_info "Setup cancelled by user"
+            exit 0
+        fi
     fi
 
     # Execute setup steps

@@ -227,21 +227,23 @@ update_environment_configuration() {
     done
     echo ""
     log_warn "Updating the environment may cause brief downtime or service interruption."
-    
-    # Skip prompt in test mode
-    if [ "$TEST_MODE" = "true" ]; then
+
+    # Non-interactive before TEST_MODE so --yes can apply updates under mocked aws in unit tests
+    if [ "${NON_INTERACTIVE:-}" = "true" ]; then
+        log_info "Non-interactive mode: applying environment configuration update without confirmation"
+    elif [ "$TEST_MODE" = "true" ]; then
         log_info "Skipping environment update"
         return 0
+    else
+        read -p "Do you want to update the environment? (yes/no): " -r
+        echo ""
+
+        if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+            log_info "Skipping environment update"
+            return 0
+        fi
     fi
-    
-    read -p "Do you want to update the environment? (yes/no): " -r
-    echo ""
-    
-    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        log_info "Skipping environment update"
-        return 0
-    fi
-    
+
     log_info "Updating environment configuration..."
     create_environment_options "$cert_arn" "$instance_profile"
     
