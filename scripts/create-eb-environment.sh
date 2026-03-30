@@ -44,6 +44,32 @@ create_application() {
     log_info "Application created successfully"
 }
 
+# When an exact platform pin is gone (e.g. old vX.Y.Z) or config uses console wording, match by
+# stack prefix + "running <runtime>" and take the lexically latest stack name. Applies to any
+# standard API name "64bit <OS> v* running <runtime>" (Linux, Windows, etc.).
+try_resolve_latest_matching_stack() {
+    local platform=$1
+    local stack_prefix=""
+    local running_suffix=""
+
+    if [[ "$platform" =~ ^(64bit\ .+)\ v[0-9.]+\ running\ (.+)$ ]]; then
+        stack_prefix="${BASH_REMATCH[1]}"
+        running_suffix="running ${BASH_REMATCH[2]}"
+    elif [[ "$platform" =~ ^(.+)\ running\ on\ (64bit\ .+)$ ]]; then
+        running_suffix="running ${BASH_REMATCH[1]}"
+        stack_prefix="${BASH_REMATCH[2]}"
+    else
+        echo ""
+        return 0
+    fi
+
+    aws elasticbeanstalk list-available-solution-stacks \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        --query "SolutionStacks[?contains(@, \`${stack_prefix}\`) && contains(@, \`${running_suffix}\`)] | sort(@) | [-1]" \
+        --output text
+}
+
 get_solution_stack_name() {
     local platform=$1
 
@@ -57,15 +83,10 @@ get_solution_stack_name() {
         --output text)
 
     if [ -z "$stack_name" ] || [ "$stack_name" = "None" ]; then
-        # Console wording is often "Docker running on 64bit Amazon Linux 2023"; API names use
-        # "64bit Amazon Linux 2023 vX.Y.Z running Docker". Pick latest matching stack when obsolete
-        # version pins no longer exist.
-        if [[ "$platform" == *"Docker"* ]] && [[ "$platform" == *"Amazon Linux 2023"* ]]; then
-            stack_name=$(aws elasticbeanstalk list-available-solution-stacks \
-                --profile "$AWS_PROFILE" \
-                --region "$AWS_REGION" \
-                --query "SolutionStacks[?contains(@, '64bit Amazon Linux 2023') && contains(@, 'running Docker')] | sort(@) | [-1]" \
-                --output text)
+        local resolved
+        resolved=$(try_resolve_latest_matching_stack "$platform")
+        if [ -n "$resolved" ] && [ "$resolved" != "None" ]; then
+            stack_name=$resolved
         fi
     fi
 

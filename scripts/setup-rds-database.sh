@@ -348,7 +348,8 @@ get_or_create_db_security_group() {
                 --port 5432 \
                 --source-group "$eb_sg_id" \
                 --profile "$AWS_PROFILE" \
-                --region "$AWS_REGION" 2>/dev/null || log_warn "Ingress rule may already exist"
+                --region "$AWS_REGION" \
+                >/dev/null 2>/dev/null || log_warn "Ingress rule may already exist"
             
             log_info "Ingress rule added"
         else
@@ -382,8 +383,9 @@ get_or_create_db_security_group() {
         --port 5432 \
         --source-group "$eb_sg_id" \
         --profile "$AWS_PROFILE" \
-        --region "$AWS_REGION"
-    
+        --region "$AWS_REGION" \
+        >/dev/null
+
     log_info "Ingress rule added successfully"
     
     # Tag security group

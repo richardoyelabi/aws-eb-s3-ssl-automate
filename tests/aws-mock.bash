@@ -306,13 +306,28 @@ CONFIGJSON
         elasticbeanstalk.list-available-solution-stacks)
             local query=$(get_arg_value "--query" "$all_args")
             if [[ "$query" == *"contains"* ]]; then
-                # Handle query with filter
-                if [[ "$all_args" == *"Python"* ]]; then
+                # Fuzzy match: dual contains + sort (try_resolve_latest_matching_stack)
+                if [[ "$query" == *"sort(@)"* ]] || [[ "$all_args" == *"sort(@)"* ]]; then
+                    if [[ "$all_args" == *"running Docker"* ]] && [[ "$all_args" == *"Amazon Linux 2023"* ]]; then
+                        echo "64bit Amazon Linux 2023 v5.12.0 running Docker"
+                    elif [[ "$all_args" == *"running Python"* ]]; then
+                        echo "64bit Amazon Linux 2023 v5.1.0 running Python 3.11"
+                    elif [[ "$all_args" == *"running Node"* ]]; then
+                        echo "64bit Amazon Linux 2 v5.9.0 running Node.js 20"
+                    elif [[ "$all_args" == *"running IIS"* ]] || [[ "$all_args" == *"Windows Server"* ]]; then
+                        echo "64bit Windows Server Core 2022 v2.22.3 running IIS 10.0"
+                    else
+                        echo "None"
+                    fi
+                # Console-style strings never substring-match real stack names
+                elif [[ "$all_args" == *"running on 64bit"* ]]; then
+                    echo "None"
+                elif [[ "$all_args" == *"v99.0.0"* ]] || [[ "$all_args" == *"v0.0.0"* ]]; then
+                    echo "None"
+                elif [[ "$all_args" == *"Python"* ]]; then
                     echo "64bit Amazon Linux 2023 v4.0.0 running Python 3.11"
                 elif [[ "$all_args" == *"Node"* ]]; then
                     echo "64bit Amazon Linux 2 v5.8.0 running Node.js 18"
-                elif [[ "$all_args" == *"running Docker"* ]] && [[ "$all_args" == *"Amazon Linux 2023"* ]]; then
-                    echo "64bit Amazon Linux 2023 v5.12.0 running Docker"
                 else
                     echo "None"
                 fi
@@ -525,22 +540,27 @@ CONFIGJSON
             ;;
         ec2.describe-security-groups)
             local all_args_str="$all_args"
+            # When the script uses --query SecurityGroups[0].GroupId --output text, empty lists must be None (not raw JSON).
+            local empty_sg_response='{"SecurityGroups": []}'
+            if [[ "$all_args_str" == *"SecurityGroups[0].GroupId"* ]]; then
+                empty_sg_response="None"
+            fi
             if [[ "$all_args_str" == *"group-id"* ]]; then
                 local sg_id=$(echo "$all_args_str" | sed -n 's/.*--group-ids \([^ ]*\).*/\1/p')
                 if [[ "$sg_id" == "sg-"* ]]; then
                     echo '{"SecurityGroups": [{"GroupId": "'"$sg_id"'", "GroupName": "test-db-sg", "VpcId": "vpc-12345678", "IpPermissions": [{"IpProtocol": "tcp", "FromPort": 5432, "ToPort": 5432, "UserIdGroupPairs": [{"GroupId": "sg-eb123456"}]}]}]}'
                 else
-                    echo '{"SecurityGroups": []}'
+                    echo "$empty_sg_response"
                 fi
             elif [[ "$all_args_str" == *"group-name"* ]]; then
                 local sg_name=$(echo "$all_args_str" | sed -n 's/.*Name=group-name,Values=\([^ ]*\).*/\1/p')
                 if [[ "$sg_name" == "test-app-test-env-db-sg" ]] || [[ "$sg_name" == "existing-db-sg" ]]; then
                     echo '{"SecurityGroups": [{"GroupId": "sg-db123456", "GroupName": "'"$sg_name"'", "VpcId": "vpc-12345678"}]}'
                 else
-                    echo '{"SecurityGroups": []}'
+                    echo "$empty_sg_response"
                 fi
             else
-                echo '{"SecurityGroups": []}'
+                echo "$empty_sg_response"
             fi
             ;;
         ec2.create-security-group)
@@ -548,6 +568,8 @@ CONFIGJSON
             echo "sg-new123456"
             ;;
         ec2.authorize-security-group-ingress)
+            # Real AWS CLI prints JSON to stdout; scripts must not capture it in $().
+            echo '{"Return": true, "SecurityGroupRules": []}'
             return 0
             ;;
         ec2.create-tags)

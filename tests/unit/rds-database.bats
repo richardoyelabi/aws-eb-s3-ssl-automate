@@ -119,6 +119,15 @@ teardown() {
     assert_output --partial "already exists"
 }
 
+@test "get_or_create_db_security_group capture is only group id when authorize prints JSON" {
+    # Regression: real authorize-security-group-ingress writes JSON to stdout; $(...) must not include it.
+    local captured
+    captured=$(get_or_create_db_security_group "new-db-sg" "vpc-12345678" "sg-eb123456")
+    [ "$captured" = "sg-new123456" ]
+    [[ "$captured" != *"{"* ]]
+    [[ "$captured" != *"Return"* ]]
+}
+
 @test "check_existing_db_instance returns NOT_EXISTS for new database" {
     run check_existing_db_instance "new-db-instance"
     [ "$status" -eq 0 ]

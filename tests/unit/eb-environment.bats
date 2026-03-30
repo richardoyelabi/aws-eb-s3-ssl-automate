@@ -50,6 +50,31 @@ teardown() {
     [[ "$output" == *"running Docker"* ]]
 }
 
+@test "get_solution_stack_name resolves Python on AL2023 console-style platform string" {
+    run get_solution_stack_name "Python 3.11 running on 64bit Amazon Linux 2023"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"running Python"* ]]
+}
+
+@test "get_solution_stack_name resolves obsolete API-style pin to latest matching stack" {
+    run get_solution_stack_name "64bit Amazon Linux 2023 v99.0.0 running Python 3.11"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"running Python 3.11"* ]]
+}
+
+@test "get_solution_stack_name resolves IIS on Windows console-style platform string" {
+    run get_solution_stack_name "IIS 10.0 running on 64bit Windows Server Core 2022"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Windows"* ]]
+    [[ "$output" == *"IIS"* ]]
+}
+
+@test "get_solution_stack_name resolves obsolete API-style Windows pin to latest matching stack" {
+    run get_solution_stack_name "64bit Windows Server Core 2022 v0.0.0 running IIS 10.0"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"running IIS 10.0"* ]]
+}
+
 @test "create_environment aborts when solution stack cannot be resolved" {
     run create_environment "test-app" "brand-new-unresolved-env" "NonExistentPlatform" "" "test-profile"
     [ "$status" -eq 1 ]
