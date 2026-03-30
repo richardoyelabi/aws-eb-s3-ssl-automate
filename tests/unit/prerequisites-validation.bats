@@ -74,9 +74,9 @@ setup() {
     export MOCK_JQ_VERSION=""
     
     # Source only the function definitions from prerequisites.sh
-    # We use sed to exclude the auto-execution lines at the end
     local temp_script="$TEST_TMPDIR/prerequisites-sourced.sh"
-    sed '/^# Run all prerequisite checks/,$d' "$SCRIPT_DIR/validate/prerequisites.sh" > "$temp_script"
+    sed -e '/^# shellcheck disable=SC1091$/,/^infrastructure_config_load_optional/d' \
+        -e '/^# Run all prerequisite checks/,$d' "$SCRIPT_DIR/validate/prerequisites.sh" > "$temp_script"
     source "$temp_script"
     rm -f "$temp_script"
 }

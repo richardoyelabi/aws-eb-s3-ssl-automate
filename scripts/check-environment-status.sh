@@ -7,15 +7,51 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+
+cli_config=""
+cli_env=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            cat <<EOF
+Usage: $0 [OPTIONS]
+
+Same config resolution as setup-eb-environment.sh: INFRA_CONFIG, --config,
+--env / INFRA_ENV, default config.env.
+
+OPTIONS:
+    -c, --config FILE   Explicit configuration file
+    -e, --env NAME      Use config.NAME.env in the project root
+EOF
+            exit 0
+            ;;
+        -c|--config)
+            cli_config="$2"
+            shift 2
+            ;;
+        -e|--env)
+            cli_env="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if ! infrastructure_config_load "$SCRIPT_DIR" "$cli_config" "$cli_env"; then
+    exit 1
+fi
+
 # Color codes
 GREEN="\033[0;32m"
 YELLOW="\033[1;33m"
 RED="\033[0;31m"
 CYAN="\033[0;36m"
 NC="\033[0m"
-
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/config.env"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"

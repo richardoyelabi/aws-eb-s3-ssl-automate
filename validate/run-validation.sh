@@ -9,6 +9,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+
 # Color codes for output
 RED="\033[0;31m"
 GREEN="\033[0;32m"
@@ -31,6 +34,47 @@ log_error() {
 log_success() {
     echo -e "${GREEN}[✓]${NC} $1"
 }
+
+show_usage() {
+    cat <<EOF
+Usage: $0 [OPTIONS]
+
+Runs validate/*.sh using the same config resolution as setup-eb-environment.sh:
+INFRA_CONFIG, then --config FILE, then --env NAME / INFRA_ENV, then config.env.
+
+OPTIONS:
+    -h, --help          Show this help
+    -c, --config FILE   Explicit configuration file
+    -e, --env NAME      Use config.NAME.env in the project root
+
+EOF
+}
+
+cli_config=""
+cli_env=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        -c|--config)
+            cli_config="$2"
+            shift 2
+            ;;
+        -e|--env)
+            cli_env="$2"
+            shift 2
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
+infrastructure_config_export_for_children "$SCRIPT_DIR" "$cli_config" "$cli_env"
 
 echo ""
 echo -e "${CYAN}🔍 AWS EB Environment Validation${NC}"

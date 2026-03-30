@@ -15,7 +15,8 @@ NC="\033[0m" # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/config.env" 2>/dev/null || true
+source "$SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+infrastructure_config_load_optional "$SCRIPT_DIR"
 
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"

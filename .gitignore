@@ -1,5 +1,6 @@
 # Configuration files with secrets
 config.env
+config.*.env
 
 # Temporary files
 *.tmp

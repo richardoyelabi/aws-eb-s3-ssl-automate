@@ -134,6 +134,7 @@ teardown() {
     [ "$status" -eq 0 ]
     assert_output --partial "--help"
     assert_output --partial "--config FILE"
+    assert_output --partial "--env NAME"
     assert_output --partial "--skip-ssl"
     assert_output --partial "--dry-run"
     assert_output --partial "--yes"
@@ -155,6 +156,8 @@ teardown() {
     assert_output --partial "./setup-eb-environment.sh"
     assert_output --partial "# Use custom config file"
     assert_output --partial "--config my-config.env"
+    assert_output --partial "# Use per-environment file"
+    assert_output --partial "--env staging"
     assert_output --partial "# Validate configuration only"
     assert_output --partial "--dry-run"
 }

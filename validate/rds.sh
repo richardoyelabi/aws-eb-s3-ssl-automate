@@ -14,6 +14,9 @@ NC="\033[0m" # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -33,14 +36,6 @@ log_fail() {
 validate_rds_configuration() {
     echo ""
     log_info "Validating RDS database configuration..."
-
-    if [ ! -f "$SCRIPT_DIR/config.env" ]; then
-        log_fail "Configuration file not found: $SCRIPT_DIR/config.env"
-        return 1
-    fi
-
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
 
     local has_errors=false
     local has_warnings=false
@@ -77,9 +72,6 @@ validate_db_engine() {
     echo ""
     log_info "Validating database engine..."
 
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
-
     local supported_engines=("postgres" "mysql" "mariadb")
     local is_supported=false
 
@@ -103,9 +95,6 @@ validate_db_engine() {
 validate_instance_class() {
     echo ""
     log_info "Validating instance class..."
-
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
 
     # Check if instance class follows AWS naming convention
     if [[ ! $DB_INSTANCE_CLASS =~ ^db\.[a-z0-9]+\.[a-z0-9]+$ ]]; then
@@ -144,9 +133,6 @@ validate_instance_class() {
 validate_storage_settings() {
     echo ""
     log_info "Validating storage settings..."
-
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
 
     local has_errors=false
 
@@ -191,9 +177,6 @@ validate_backup_settings() {
     echo ""
     log_info "Validating backup settings..."
 
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
-
     local has_errors=false
 
     # Validate backup retention days
@@ -233,9 +216,6 @@ validate_database_name() {
     echo ""
     log_info "Validating database name..."
 
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
-
     # Validate database name
     # PostgreSQL: alphanumeric and underscores, must start with letter or underscore
     if [[ ! $DB_NAME =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
@@ -258,9 +238,6 @@ validate_database_name() {
 validate_username() {
     echo ""
     log_info "Validating database username..."
-
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
 
     # Validate username
     if [[ ! $DB_USERNAME =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
@@ -294,9 +271,6 @@ validate_password_policy() {
     echo ""
     log_info "Validating password policy..."
 
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
-
     if [ -z "$DB_MASTER_PASSWORD" ]; then
         log_info "No password set in config - will be auto-generated"
         log_success "Auto-generated passwords meet AWS requirements"
@@ -329,9 +303,6 @@ validate_password_policy() {
 validate_security_settings() {
     echo ""
     log_info "Validating security settings..."
-
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
 
     local has_warnings=false
 
@@ -370,6 +341,10 @@ main() {
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}  RDS Database Configuration Validation${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+
+    if ! infrastructure_config_load "$SCRIPT_DIR"; then
+        return 1
+    fi
 
     local exit_code=0
 

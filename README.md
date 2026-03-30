@@ -138,6 +138,8 @@ cp config.env.example config.env
 nano config.env  # or use your preferred editor
 ```
 
+**Multiple environments:** Keep one file per target (for example `config.dev.env`, `config.staging.env`, `config.prod.env`). Copy from `config.env.example` for each. Scripts resolve configuration in this order: environment variable `INFRA_CONFIG` (path to a file), then `--config FILE`, then `--env NAME` or `INFRA_ENV` (loads `config.NAME.env`), then default `config.env`. The same rules apply to `./validate/run-validation.sh`, `./tests/test-setup.sh`, and `./scripts/check-environment-status.sh`.
+
 **Important configuration options:**
 
 ```bash
@@ -306,6 +308,9 @@ The script provides real-time progress updates and will wait up to 15 minutes fo
 # Use custom configuration file
 ./setup-eb-environment.sh --config my-custom-config.env
 
+# Use config.staging.env in the project root
+./setup-eb-environment.sh --env staging
+
 # Skip SSL configuration
 ./setup-eb-environment.sh --skip-ssl
 
@@ -423,7 +428,9 @@ The scripts will **never** create duplicate resources:
 .
 ├── setup-eb-environment.sh          # Main orchestration script
 ├── config.env.example               # Configuration template
-├── config.env                       # Your configuration (gitignored)
+├── config.env                       # Default local config (gitignored)
+├── config.*.env                     # Optional per-environment configs (gitignored), e.g. config.prod.env
+├── scripts/load-infrastructure-config.sh  # Shared config resolution for all entry scripts
 ├── README.md                        # This file
 ├── VALIDATION.md                    # Pre-deployment validation guide
 ├── TESTING.md                       # Testing framework guide

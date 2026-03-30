@@ -5,6 +5,7 @@ load '../aws-mock'
 
 setup() {
     setup_test_env
+    export INFRA_CONFIG="$SCRIPT_DIR/config.env.example"
     source "$SCRIPT_DIR/validate/environment.sh"
 }
 

@@ -5,15 +5,20 @@ load '../aws-mock'
 
 setup() {
     setup_test_env
-    # Create a temporary SCRIPT_DIR for tests
     export ORIGINAL_SCRIPT_DIR="$SCRIPT_DIR"
     export SCRIPT_DIR="$TEST_TMPDIR"
-    
-    # Copy validation scripts to temp dir (without sourcing yet)
+
     mkdir -p "$TEST_TMPDIR/validate"
-    
-    # Create a modified version that doesn't auto-run
-    sed '/^# Run all config validation checks/,$d' "$ORIGINAL_SCRIPT_DIR/validate/config.sh" > "$TEST_TMPDIR/validate/config.sh"
+    # Strip auto-load and auto-run footer so tests control when config is loaded
+    sed '/^# shellcheck disable=SC1091$/,/^fi$/d' "$ORIGINAL_SCRIPT_DIR/validate/config.sh" \
+        | sed '/^# Run all config validation checks/,$d' > "$TEST_TMPDIR/validate/config.sh"
+}
+
+load_fixture_config() {
+    unset INFRA_CONFIG INFRA_ENV INFRA_CONFIG_PATH
+    # shellcheck disable=SC1091
+    source "$ORIGINAL_SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+    infrastructure_config_load "$TEST_TMPDIR"
 }
 
 teardown() {
@@ -40,18 +45,20 @@ EOF
 
 @test "validate_config_file succeeds with valid config" {
     create_bucket_test_config "test-static-assets" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_config_file
     [ "$status" -eq 0 ]
     assert_output --partial "Configuration file is valid"
 }
 
-@test "validate_config_file fails when config file missing" {
+@test "infrastructure_config_load fails when default config file missing" {
     rm -f "$TEST_TMPDIR/config.env"
-    source "$TEST_TMPDIR/validate/config.sh"
-    
-    run validate_config_file
+    unset INFRA_CONFIG INFRA_ENV INFRA_CONFIG_PATH
+    # shellcheck disable=SC1091
+    source "$ORIGINAL_SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+    run infrastructure_config_load "$TEST_TMPDIR"
     [ "$status" -ne 0 ]
     assert_output --partial "Configuration file not found"
 }
@@ -69,8 +76,9 @@ STATIC_ASSETS_BUCKET=test-static
 UPLOADS_BUCKET=test-uploads
 INSTANCE_TYPE=t3.micro
 EOF
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_config_file
     [ "$status" -ne 0 ]
     assert_output --partial "Required variable not set"
@@ -78,8 +86,9 @@ EOF
 
 @test "validate_bucket_names succeeds with valid bucket names" {
     create_bucket_test_config "valid-bucket-name" "another-valid-bucket"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -eq 0 ]
     assert_output --partial "Bucket name valid"
@@ -87,8 +96,9 @@ EOF
 
 @test "validate_bucket_names fails with too short name" {
     create_bucket_test_config "ab" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -ne 0 ]
     assert_output --partial "Invalid bucket name length"
@@ -97,8 +107,9 @@ EOF
 @test "validate_bucket_names fails with too long name" {
     local long_name=$(printf 'a%.0s' {1..64})
     create_bucket_test_config "$long_name" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -ne 0 ]
     assert_output --partial "Invalid bucket name length"
@@ -106,8 +117,9 @@ EOF
 
 @test "validate_bucket_names fails with invalid characters" {
     create_bucket_test_config "Invalid_Bucket_Name" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -ne 0 ]
     assert_output --partial "Invalid bucket name format"
@@ -115,8 +127,9 @@ EOF
 
 @test "validate_bucket_names fails with leading hyphen" {
     create_bucket_test_config "-invalid-bucket" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -ne 0 ]
     assert_output --partial "Invalid bucket name format"
@@ -124,8 +137,9 @@ EOF
 
 @test "validate_bucket_names fails with trailing hyphen" {
     create_bucket_test_config "invalid-bucket-" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -ne 0 ]
     assert_output --partial "Invalid bucket name format"
@@ -133,8 +147,9 @@ EOF
 
 @test "validate_bucket_names accepts minimum valid length" {
     create_bucket_test_config "abc" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -eq 0 ]
 }
@@ -142,8 +157,9 @@ EOF
 @test "validate_bucket_names accepts maximum valid length" {
     local max_name=$(printf 'a%.0s' {1..63})
     create_bucket_test_config "$max_name" "test-uploads"
+    load_fixture_config
     source "$TEST_TMPDIR/validate/config.sh"
-    
+
     run validate_bucket_names
     [ "$status" -eq 0 ]
 }

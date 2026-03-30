@@ -15,7 +15,7 @@ NC="\033[0m" # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/config.env"
+source "$SCRIPT_DIR/scripts/load-infrastructure-config.sh"
 
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1" >&2
@@ -81,20 +81,16 @@ check_prerequisites() {
 }
 
 load_configuration() {
+    local cli_config="${1:-}"
+    local cli_env="${2:-}"
+
     log_section "Loading Configuration"
 
-    if [ ! -f "$SCRIPT_DIR/config.env" ]; then
-        log_error "Configuration file not found: $SCRIPT_DIR/config.env"
-        echo ""
-        echo "Please create config.env from the example:"
-        echo "  cp config.env.example config.env"
-        echo "  # Edit config.env with your settings"
+    if ! infrastructure_config_load "$SCRIPT_DIR" "$cli_config" "$cli_env"; then
         exit 1
     fi
 
-    log_info "Loading configuration from: $SCRIPT_DIR/config.env"
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
+    log_info "Loading configuration from: $INFRA_CONFIG_PATH"
 
     # Validate required configuration
     local required_vars=(
@@ -209,9 +205,13 @@ Usage: $0 [OPTIONS]
 
 AWS Elastic Beanstalk Environment Setup Script
 
+Environment selection (same order everywhere): INFRA_CONFIG, then --config, then
+--env or INFRA_ENV (config.NAME.env), then default config.env.
+
 OPTIONS:
     -h, --help              Show this help message
-    -c, --config FILE       Use custom configuration file (default: config.env)
+    -c, --config FILE       Use explicit configuration file path
+    -e, --env NAME          Use config.NAME.env in the project root
     --skip-ssl              Skip SSL certificate validation and configuration
     --dry-run               Validate configuration without making changes
     -y, --yes               Non-interactive: no confirmation prompts; apply EB
@@ -224,6 +224,9 @@ EXAMPLES:
 
     # Use custom config file
     ./setup-eb-environment.sh --config my-config.env
+
+    # Use per-environment file (config.staging.env)
+    ./setup-eb-environment.sh --env staging
 
     # Validate configuration only
     ./setup-eb-environment.sh --dry-run
@@ -245,7 +248,8 @@ main() {
     local skip_ssl=false
     local dry_run=false
     local assume_yes=false
-    local config_file="$SCRIPT_DIR/config.env"
+    local cli_config=""
+    local cli_env=""
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -255,7 +259,11 @@ main() {
                 exit 0
                 ;;
             -c|--config)
-                config_file="$2"
+                cli_config="$2"
+                shift 2
+                ;;
+            -e|--env)
+                cli_env="$2"
                 shift 2
                 ;;
             --skip-ssl)
@@ -294,17 +302,9 @@ main() {
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Check prerequisites
-    check_prerequisites
+    load_configuration "$cli_config" "$cli_env"
 
-    # Load configuration
-    if [ "$config_file" != "$SCRIPT_DIR/config.env" ]; then
-        export SCRIPT_DIR
-        # shellcheck disable=SC1090
-        source "$config_file"
-    else
-        load_configuration
-    fi
+    check_prerequisites
 
     if [ "$dry_run" = true ]; then
         log_info "Dry-run mode: Configuration validation successful"

@@ -25,6 +25,7 @@ git submodule update --init --recursive
 # Copy configuration template
 cp config.env.example config.env
 # Edit config.env with your test values
+# Optional: use per-environment files (config.dev.env, etc.) and ./validate/run-validation.sh --env dev
 
 # Run validation to ensure your environment is ready
 ./validate/run-validation.sh

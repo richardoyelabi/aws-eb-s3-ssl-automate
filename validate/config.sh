@@ -14,6 +14,12 @@ NC="\033[0m" # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+if ! infrastructure_config_load "$SCRIPT_DIR"; then
+    exit 1
+fi
+
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -33,15 +39,6 @@ log_fail() {
 validate_config_file() {
     echo ""
     log_info "Validating configuration file..."
-
-    if [ ! -f "$SCRIPT_DIR/config.env" ]; then
-        log_fail "Configuration file not found: $SCRIPT_DIR/config.env"
-        echo "  Create from example: cp config.env.example config.env"
-        return 1
-    fi
-
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
 
     local required_vars=(
         "AWS_REGION"
@@ -77,9 +74,6 @@ validate_config_file() {
 validate_bucket_names() {
     echo ""
     log_info "Validating S3 bucket names..."
-
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
 
     local bucket_names=("$STATIC_ASSETS_BUCKET" "$UPLOADS_BUCKET")
     local has_errors=false

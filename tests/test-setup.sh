@@ -14,9 +14,6 @@ NC="\033[0m" # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/config.env"
-
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
@@ -165,16 +162,7 @@ test_iam_permissions() {
 validate_config_file() {
     echo ""
     log_info "Validating configuration file..."
-    
-    if [ ! -f "$SCRIPT_DIR/config.env" ]; then
-        log_fail "Configuration file not found: $SCRIPT_DIR/config.env"
-        echo "  Create from example: cp config.env.example config.env"
-        return 1
-    fi
-    
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
-    
+
     local required_vars=(
         "AWS_REGION"
         "AWS_PROFILE"
@@ -209,10 +197,7 @@ validate_config_file() {
 validate_bucket_names() {
     echo ""
     log_info "Validating S3 bucket names..."
-    
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
-    
+
     local bucket_names=("$STATIC_ASSETS_BUCKET" "$UPLOADS_BUCKET")
     local has_errors=false
     
@@ -244,10 +229,7 @@ validate_bucket_names() {
 check_existing_resources() {
     echo ""
     log_info "Checking for existing resources..."
-    
-    # shellcheck disable=SC1091
-    source "$SCRIPT_DIR/config.env"
-    
+
     # Check if application exists
     if aws elasticbeanstalk describe-applications \
         --application-names "$APP_NAME" \
@@ -312,7 +294,51 @@ run_all_tests() {
     fi
 }
 
+show_usage() {
+    cat <<EOF
+Usage: $0 [OPTIONS]
+
+Same config resolution as setup-eb-environment.sh: INFRA_CONFIG, --config,
+--env / INFRA_ENV, default config.env.
+
+OPTIONS:
+    -h, --help          Show this help
+    -c, --config FILE   Explicit configuration file
+    -e, --env NAME      Use config.NAME.env in the project root
+EOF
+}
+
 main() {
+    local cli_config=""
+    local cli_env=""
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            -c|--config)
+                cli_config="$2"
+                shift 2
+                ;;
+            -e|--env)
+                cli_env="$2"
+                shift 2
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/scripts/load-infrastructure-config.sh"
+    if ! infrastructure_config_load "$SCRIPT_DIR" "$cli_config" "$cli_env"; then
+        exit 1
+    fi
+
     run_all_tests
 }
 

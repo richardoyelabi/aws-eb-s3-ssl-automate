@@ -11,9 +11,9 @@ teardown() {
     teardown_test_env
 }
 
-@test "config.env can be sourced" {
-    # Test that config.env can be sourced independently
-    source "$SCRIPT_DIR/config.env"
+@test "config.env.example can be sourced" {
+    # Template must be valid shell for documentation and tests without a local config.env
+    source "$SCRIPT_DIR/config.env.example"
 
     # Check that key variables are available
     [ -n "$AWS_REGION" ]
@@ -86,8 +86,8 @@ teardown() {
 }
 
 @test "database configuration variables are available" {
-    # Test that database configuration variables are set
-    source "$SCRIPT_DIR/config.env"
+    # Test that database configuration variables are set in the template
+    source "$SCRIPT_DIR/config.env.example"
     
     [ -n "$DB_ENGINE" ]
     [ -n "$DB_ENGINE_VERSION" ]

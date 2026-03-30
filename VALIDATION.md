@@ -12,6 +12,9 @@ The validation system ensures your environment is ready for deployment before ru
 # Run all validation checks
 ./validate/run-validation.sh
 
+# Use the same config as setup (e.g. config.staging.env)
+./validate/run-validation.sh --env staging
+
 # Or run individual validation components
 ./validate/prerequisites.sh
 ./validate/permissions.sh
@@ -74,7 +77,7 @@ The validation system ensures your environment is ready for deployment before ru
 **Purpose**: Validate configuration file and variable values.
 
 **Checks Performed**:
-- ✅ config.env file exists
+- ✅ Resolved configuration file exists (see `INFRA_CONFIG`, `--config`, `--env` / `INFRA_ENV`, default `config.env` in [scripts/load-infrastructure-config.sh](scripts/load-infrastructure-config.sh))
 - ✅ All required variables are set
 - ✅ S3 bucket names are valid (3-63 chars, lowercase, hyphens, numbers only)
 
@@ -174,10 +177,11 @@ aws configure --profile your-profile
 ```
 [ERROR] Required variable not set: APP_NAME
 ```
-**Solution**: Update config.env file
+**Solution**: Update your resolved config file (`config.env`, `config.<name>.env`, or the path in `INFRA_CONFIG` / `--config`).
 ```bash
 cp config.env.example config.env
 nano config.env  # Add missing variables
+# Or: cp config.env.example config.staging.env && nano config.staging.env
 ```
 
 ### Insufficient IAM Permissions

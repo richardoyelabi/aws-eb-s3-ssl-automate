@@ -175,8 +175,8 @@ setup() {
     setup_test_env
 }
 
-@test "config.env can be sourced" {
-    source "$SCRIPT_DIR/config.env"
+@test "config.env.example can be sourced" {
+    source "$SCRIPT_DIR/config.env.example"
 
     [ -n "$AWS_REGION" ]
     [ -n "$APP_NAME" ]
