@@ -311,9 +311,13 @@ CONFIGJSON
                     echo "64bit Amazon Linux 2023 v4.0.0 running Python 3.11"
                 elif [[ "$all_args" == *"Node"* ]]; then
                     echo "64bit Amazon Linux 2 v5.8.0 running Node.js 18"
+                elif [[ "$all_args" == *"running Docker"* ]] && [[ "$all_args" == *"Amazon Linux 2023"* ]]; then
+                    echo "64bit Amazon Linux 2023 v5.12.0 running Docker"
                 else
                     echo "None"
                 fi
+            elif [[ "$all_args" == *"SolutionStacks[0:25]"* ]] || [[ "$query" == *"[0:25]"* ]]; then
+                echo -e "64bit Amazon Linux 2 v5.8.0 running Node.js 18\t64bit Amazon Linux 2023 v4.0.0 running Python 3.11"
             else
                 echo '{"SolutionStacks": ["64bit Amazon Linux 2 v5.8.0 running Node.js 18", "64bit Amazon Linux 2023 v4.0.0 running Python 3.11"]}'
             fi

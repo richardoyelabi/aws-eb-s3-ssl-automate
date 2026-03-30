@@ -49,22 +49,35 @@ get_solution_stack_name() {
 
     log_info "Finding solution stack for platform: $platform"
 
-    # Try to find exact match or similar
-    local stack_name=$(aws elasticbeanstalk list-available-solution-stacks \
+    local stack_name
+    stack_name=$(aws elasticbeanstalk list-available-solution-stacks \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION" \
         --query "SolutionStacks[?contains(@, \`$platform\`)] | [0]" \
         --output text)
 
     if [ -z "$stack_name" ] || [ "$stack_name" = "None" ]; then
+        # Console wording is often "Docker running on 64bit Amazon Linux 2023"; API names use
+        # "64bit Amazon Linux 2023 vX.Y.Z running Docker". Pick latest matching stack when obsolete
+        # version pins no longer exist.
+        if [[ "$platform" == *"Docker"* ]] && [[ "$platform" == *"Amazon Linux 2023"* ]]; then
+            stack_name=$(aws elasticbeanstalk list-available-solution-stacks \
+                --profile "$AWS_PROFILE" \
+                --region "$AWS_REGION" \
+                --query "SolutionStacks[?contains(@, '64bit Amazon Linux 2023') && contains(@, 'running Docker')] | sort(@) | [-1]" \
+                --output text)
+        fi
+    fi
+
+    if [ -z "$stack_name" ] || [ "$stack_name" = "None" ]; then
         log_error "Could not find solution stack matching: $platform"
-        log_info "Available platforms:"
+        log_info "Sample of available stacks (see AWS docs for full list):"
         aws elasticbeanstalk list-available-solution-stacks \
             --profile "$AWS_PROFILE" \
             --region "$AWS_REGION" \
-            --query "SolutionStacks[*]" \
-            --output table | head -20
-        exit 1
+            --query "SolutionStacks[0:25]" \
+            --output text 2>/dev/null | tr '\t' '\n' | head -25 >&2 || true
+        return 1
     fi
 
     echo "$stack_name"
@@ -285,7 +298,11 @@ create_environment() {
 
     log_info "Creating Elastic Beanstalk environment: $env_name"
 
-    local solution_stack=$(get_solution_stack_name "$platform")
+    local solution_stack
+    if ! solution_stack=$(get_solution_stack_name "$platform"); then
+        log_error "Aborting environment creation: invalid or unavailable EB_PLATFORM"
+        exit 1
+    fi
     log_info "Using solution stack: $solution_stack"
 
     create_environment_options "$cert_arn" "$instance_profile"

@@ -37,6 +37,26 @@ teardown() {
     assert_output --partial "Could not find solution stack"
 }
 
+@test "get_solution_stack_name failure does not emit table markup mistaken for stack name" {
+    run get_solution_stack_name "NonExistentPlatform"
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"ListAvailableSolutionStacks"* ]]
+    [[ "$output" != *"+----------------"* ]]
+}
+
+@test "get_solution_stack_name resolves Docker on AL2023 console-style platform string" {
+    run get_solution_stack_name "Docker running on 64bit Amazon Linux 2023"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"running Docker"* ]]
+}
+
+@test "create_environment aborts when solution stack cannot be resolved" {
+    run create_environment "test-app" "brand-new-unresolved-env" "NonExistentPlatform" "" "test-profile"
+    [ "$status" -eq 1 ]
+    assert_output --partial "Could not find solution stack"
+    assert_output --partial "Aborting environment creation"
+}
+
 @test "create_environment_options creates valid JSON" {
     create_environment_options "" "test-profile"
     [ -f /tmp/eb-options.json ]
