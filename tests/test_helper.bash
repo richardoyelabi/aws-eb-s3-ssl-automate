@@ -50,6 +50,9 @@ setup_test_env() {
 
     # Create temporary directory for test artifacts
     export TEST_TMPDIR=$(mktemp -d)
+
+    # Use /tmp for INFRA_TMP_DIR in tests (tests run sequentially, no conflict risk)
+    export INFRA_TMP_DIR="/tmp"
 }
 
 teardown_test_env() {

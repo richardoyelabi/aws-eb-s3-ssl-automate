@@ -24,7 +24,7 @@ log_error() {
 }
 
 create_trust_policy() {
-    cat > /tmp/eb-trust-policy.json <<EOF
+    cat > ${INFRA_TMP_DIR}/eb-trust-policy.json <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -44,7 +44,7 @@ create_s3_access_policy() {
     local static_bucket=$1
     local uploads_bucket=$2
 
-    cat > /tmp/s3-access-policy.json <<EOF
+    cat > ${INFRA_TMP_DIR}/s3-access-policy.json <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -101,11 +101,11 @@ create_iam_role() {
 
     aws iam create-role \
         --role-name "$role_name" \
-        --assume-role-policy-document file:///tmp/eb-trust-policy.json \
+        --assume-role-policy-document file://${INFRA_TMP_DIR}/eb-trust-policy.json \
         --profile "$AWS_PROFILE"
 
     log_info "IAM role created successfully"
-    rm -f /tmp/eb-trust-policy.json
+    rm -f ${INFRA_TMP_DIR}/eb-trust-policy.json
 }
 
 attach_managed_policies() {
@@ -165,11 +165,11 @@ create_and_attach_s3_policy() {
             --version-id "$current_version" \
             --profile "$AWS_PROFILE" \
             --query 'PolicyVersion.Document' \
-            --output json > /tmp/existing-s3-policy.json
+            --output json > ${INFRA_TMP_DIR}/existing-s3-policy.json
         
         # Normalize both JSON documents for comparison
-        local new_policy_normalized=$(normalize_json /tmp/s3-access-policy.json)
-        local existing_policy_normalized=$(normalize_json /tmp/existing-s3-policy.json)
+        local new_policy_normalized=$(normalize_json ${INFRA_TMP_DIR}/s3-access-policy.json)
+        local existing_policy_normalized=$(normalize_json ${INFRA_TMP_DIR}/existing-s3-policy.json)
         
         if [ "$new_policy_normalized" != "$existing_policy_normalized" ]; then
             log_warn "Policy content has changed, creating new version"
@@ -207,20 +207,20 @@ create_and_attach_s3_policy() {
             # Create new version
             aws iam create-policy-version \
                 --policy-arn "$policy_arn" \
-                --policy-document file:///tmp/s3-access-policy.json \
+                --policy-document file://${INFRA_TMP_DIR}/s3-access-policy.json \
                 --set-as-default \
                 --profile "$AWS_PROFILE"
         else
             log_info "Policy content unchanged, skipping update"
         fi
         
-        rm -f /tmp/existing-s3-policy.json
+        rm -f ${INFRA_TMP_DIR}/existing-s3-policy.json
     else
         # Create new policy
         log_info "Creating new policy"
         aws iam create-policy \
             --policy-name "$policy_name" \
-            --policy-document file:///tmp/s3-access-policy.json \
+            --policy-document file://${INFRA_TMP_DIR}/s3-access-policy.json \
             --profile "$AWS_PROFILE"
     fi
 
@@ -231,7 +231,7 @@ create_and_attach_s3_policy() {
         --policy-arn "$policy_arn" \
         --profile "$AWS_PROFILE" 2>/dev/null || log_warn "Policy may already be attached"
 
-    rm -f /tmp/s3-access-policy.json
+    rm -f ${INFRA_TMP_DIR}/s3-access-policy.json
     log_info "S3 access policy created and attached successfully"
 }
 
@@ -268,7 +268,7 @@ create_instance_profile() {
         fi
         
         export EB_INSTANCE_PROFILE="$profile_name"
-        echo "$profile_name" > /tmp/eb-instance-profile.txt
+        echo "$profile_name" > ${INFRA_TMP_DIR}/eb-instance-profile.txt
         return 0
     fi
 
@@ -289,7 +289,7 @@ create_instance_profile() {
     fi
 
     export EB_INSTANCE_PROFILE="$profile_name"
-    echo "$profile_name" > /tmp/eb-instance-profile.txt
+    echo "$profile_name" > ${INFRA_TMP_DIR}/eb-instance-profile.txt
 
     log_info "Instance profile created successfully"
 }
@@ -311,7 +311,7 @@ main() {
         create_and_attach_s3_policy "aws-elasticbeanstalk-ec2-role"
         
         export EB_INSTANCE_PROFILE="aws-elasticbeanstalk-ec2-role"
-        echo "aws-elasticbeanstalk-ec2-role" > /tmp/eb-instance-profile.txt
+        echo "aws-elasticbeanstalk-ec2-role" > ${INFRA_TMP_DIR}/eb-instance-profile.txt
     else
         log_info "Creating custom IAM role: $CUSTOM_IAM_ROLE_NAME"
         

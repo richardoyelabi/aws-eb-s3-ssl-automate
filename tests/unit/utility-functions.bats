@@ -18,95 +18,52 @@ teardown() {
     teardown_test_env
 }
 
-@test "cleanup_temp_files removes all expected temp files" {
-    # Create test temp files
-    local temp_files=(
-        "/tmp/acm-cert-arn.txt"
-        "/tmp/eb-instance-profile.txt"
-        "/tmp/eb-env-url.txt"
-        "/tmp/cors-config-test.json"
-        "/tmp/eb-trust-policy.json"
-        "/tmp/s3-access-policy.json"
-        "/tmp/eb-options.json"
-        "/tmp/https-options.json"
-        "/tmp/custom-domain.txt"
-        "/tmp/route53-test1.json"
-        "/tmp/route53-test2.json"
-    )
+@test "cleanup_temp_files removes environment-specific temp directory" {
+    # Create a test INFRA_TMP_DIR with files
+    export INFRA_TMP_DIR=$(mktemp -d)
+    echo "test" > "$INFRA_TMP_DIR/acm-cert-arn.txt"
+    echo "test" > "$INFRA_TMP_DIR/eb-options.json"
+    echo "test" > "$INFRA_TMP_DIR/cors-config.json"
 
-    # Create the temp files
-    for file in "${temp_files[@]}"; do
-        echo "test content" > "$file"
-        [ -f "$file" ]  # Verify file was created
-    done
-
-    # Run cleanup function
-    run cleanup_temp_files
-
-    # Verify function succeeded
-    [ "$status" -eq 0 ]
-
-    # Verify all temp files were removed
-    for file in "${temp_files[@]}"; do
-        [ ! -f "$file" ]  # File should not exist
-    done
-}
-
-@test "cleanup_temp_files handles missing files gracefully" {
-    # Ensure temp files don't exist
-    rm -f /tmp/acm-cert-arn.txt
-    rm -f /tmp/eb-instance-profile.txt
-    rm -f /tmp/eb-env-url.txt
-    rm -f /tmp/cors-config*.json
-    rm -f /tmp/eb-trust-policy.json
-    rm -f /tmp/s3-access-policy.json
-    rm -f /tmp/eb-options.json
-    rm -f /tmp/https-options.json
-    rm -f /tmp/custom-domain.txt
-    rm -f /tmp/route53-*.json
-
-    # Run cleanup function on non-existent files
-    run cleanup_temp_files
-
-    # Should succeed even if files don't exist
-    [ "$status" -eq 0 ]
-}
-
-@test "cleanup_temp_files handles wildcard patterns correctly" {
-    # Create files matching wildcard patterns
-    echo "cors1" > "/tmp/cors-config1.json"
-    echo "cors2" > "/tmp/cors-config2.json"
-    echo "route1" > "/tmp/route53-1.json"
-    echo "route2" > "/tmp/route53-2.json"
+    [ -d "$INFRA_TMP_DIR" ]
 
     # Run cleanup
     run cleanup_temp_files
 
-    # Verify wildcard files were removed
-    [ ! -f "/tmp/cors-config1.json" ]
-    [ ! -f "/tmp/cors-config2.json" ]
-    [ ! -f "/tmp/route53-1.json" ]
-    [ ! -f "/tmp/route53-2.json" ]
+    [ "$status" -eq 0 ]
+    [ ! -d "$INFRA_TMP_DIR" ]
 }
 
-@test "cleanup_temp_files removes only expected files" {
-    # Create expected temp files and one unrelated file
-    echo "temp1" > "/tmp/acm-cert-arn.txt"
-    echo "temp2" > "/tmp/eb-instance-profile.txt"
-    echo "should remain" > "/tmp/unrelated-file.txt"
+@test "cleanup_temp_files handles missing directory gracefully" {
+    export INFRA_TMP_DIR="/tmp/nonexistent-infra-dir-$$"
 
-    # Run cleanup
+    # Run cleanup on non-existent directory
     run cleanup_temp_files
 
-    # Expected files should be removed
-    [ ! -f "/tmp/acm-cert-arn.txt" ]
-    [ ! -f "/tmp/eb-instance-profile.txt" ]
+    [ "$status" -eq 0 ]
+}
 
-    # Unrelated file should remain
-    [ -f "/tmp/unrelated-file.txt" ]
+@test "cleanup_temp_files handles unset INFRA_TMP_DIR gracefully" {
+    unset INFRA_TMP_DIR
 
-    # Clean up the unrelated file
-    rm -f "/tmp/unrelated-file.txt"
+    run cleanup_temp_files
+
+    [ "$status" -eq 0 ]
+}
+
+@test "cleanup_temp_files removes only its own directory" {
+    # Create INFRA_TMP_DIR and a sibling file
+    export INFRA_TMP_DIR=$(mktemp -d)
+    echo "test" > "$INFRA_TMP_DIR/eb-options.json"
+    echo "should remain" > "/tmp/unrelated-file-$$.txt"
+
+    run cleanup_temp_files
+
+    [ "$status" -eq 0 ]
+    [ ! -d "$INFRA_TMP_DIR" ]
+    [ -f "/tmp/unrelated-file-$$.txt" ]
+
+    rm -f "/tmp/unrelated-file-$$.txt"
 }
 
 @test "show_usage displays help text" {

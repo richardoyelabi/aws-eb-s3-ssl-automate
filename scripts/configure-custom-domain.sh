@@ -392,7 +392,7 @@ configure_domain_with_route53() {
     # Create change batch JSON
     if [ "$is_root_domain" = true ]; then
         # Use ALIAS record for root domain
-        cat > /tmp/route53-change-batch.json <<EOF
+        cat > ${INFRA_TMP_DIR}/route53-change-batch.json <<EOF
 {
   "Changes": [
     {
@@ -413,7 +413,7 @@ EOF
         log_info "Creating ALIAS record for root domain"
     else
         # Use CNAME record for subdomain
-        cat > /tmp/route53-change-batch.json <<EOF
+        cat > ${INFRA_TMP_DIR}/route53-change-batch.json <<EOF
 {
   "Changes": [
     {
@@ -438,13 +438,13 @@ EOF
     # Apply the change
     local change_info=$(aws route53 change-resource-record-sets \
         --hosted-zone-id "$hosted_zone_id" \
-        --change-batch file:///tmp/route53-change-batch.json \
+        --change-batch file://${INFRA_TMP_DIR}/route53-change-batch.json \
         --profile "$AWS_PROFILE" \
         --output json)
     
     local change_id=$(echo "$change_info" | grep -o '"Id": "[^"]*"' | cut -d'"' -f4)
     
-    rm -f /tmp/route53-change-batch.json
+    rm -f ${INFRA_TMP_DIR}/route53-change-batch.json
     
     if [[ $record_status == DIFFERENT:* ]]; then
         log_info "DNS record updated successfully!"
@@ -580,7 +580,7 @@ main() {
     
     # Export for use in other scripts
     export CUSTOM_DOMAIN_CONFIGURED="true"
-    echo "$CUSTOM_DOMAIN" > /tmp/custom-domain.txt
+    echo "$CUSTOM_DOMAIN" > ${INFRA_TMP_DIR}/custom-domain.txt
 }
 
 # Run main function if script is executed directly

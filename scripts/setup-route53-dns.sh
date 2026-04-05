@@ -145,7 +145,7 @@ create_alias_record() {
     
     log_info "Creating/Updating ALIAS record: $domain -> $target_dns"
     
-    cat > /tmp/route53-alias-record.json <<EOF
+    cat > ${INFRA_TMP_DIR}/route53-alias-record.json <<EOF
 {
   "Changes": [
     {
@@ -166,13 +166,13 @@ EOF
     
     local change_info=$(aws route53 change-resource-record-sets \
         --hosted-zone-id "$hosted_zone_id" \
-        --change-batch file:///tmp/route53-alias-record.json \
+        --change-batch file://${INFRA_TMP_DIR}/route53-alias-record.json \
         --profile "$AWS_PROFILE" \
         --output json)
     
     local change_id=$(echo "$change_info" | grep -o '"Id": "[^"]*"' | cut -d'"' -f4)
     
-    rm -f /tmp/route53-alias-record.json
+    rm -f ${INFRA_TMP_DIR}/route53-alias-record.json
     
     log_info "ALIAS record created successfully!"
     log_info "Change ID: $change_id"
@@ -202,7 +202,7 @@ create_cname_record() {
     
     log_info "Creating/Updating CNAME record: $domain -> $target_dns"
     
-    cat > /tmp/route53-cname-record.json <<EOF
+    cat > ${INFRA_TMP_DIR}/route53-cname-record.json <<EOF
 {
   "Changes": [
     {
@@ -224,13 +224,13 @@ EOF
     
     local change_info=$(aws route53 change-resource-record-sets \
         --hosted-zone-id "$hosted_zone_id" \
-        --change-batch file:///tmp/route53-cname-record.json \
+        --change-batch file://${INFRA_TMP_DIR}/route53-cname-record.json \
         --profile "$AWS_PROFILE" \
         --output json)
     
     local change_id=$(echo "$change_info" | grep -o '"Id": "[^"]*"' | cut -d'"' -f4)
     
-    rm -f /tmp/route53-cname-record.json
+    rm -f ${INFRA_TMP_DIR}/route53-cname-record.json
     
     log_info "CNAME record created successfully!"
     log_info "Change ID: $change_id"
@@ -256,7 +256,7 @@ delete_dns_record() {
     fi
     
     # Create delete change batch
-    cat > /tmp/route53-delete-record.json <<EOF
+    cat > ${INFRA_TMP_DIR}/route53-delete-record.json <<EOF
 {
   "Changes": [
     {
@@ -269,10 +269,10 @@ EOF
     
     aws route53 change-resource-record-sets \
         --hosted-zone-id "$hosted_zone_id" \
-        --change-batch file:///tmp/route53-delete-record.json \
+        --change-batch file://${INFRA_TMP_DIR}/route53-delete-record.json \
         --profile "$AWS_PROFILE"
     
-    rm -f /tmp/route53-delete-record.json
+    rm -f ${INFRA_TMP_DIR}/route53-delete-record.json
     
     log_info "DNS record deleted successfully"
 }

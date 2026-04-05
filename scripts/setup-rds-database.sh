@@ -729,7 +729,7 @@ configure_read_replica_autoscaling() {
     
     log_info "Creating target tracking scaling policy..."
     
-    cat > /tmp/scaling-policy-config.json <<EOF
+    cat > ${INFRA_TMP_DIR}/scaling-policy-config.json <<EOF
 {
     "TargetValue": ${target_cpu}.0,
     "PredefinedMetricSpecification": {
@@ -746,12 +746,12 @@ EOF
         --scalable-dimension rds:replica:ReadReplicaCount \
         --policy-name "$policy_name" \
         --policy-type TargetTrackingScaling \
-        --target-tracking-scaling-policy-configuration file:///tmp/scaling-policy-config.json \
+        --target-tracking-scaling-policy-configuration file://${INFRA_TMP_DIR}/scaling-policy-config.json \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION" \
         > /dev/null
     
-    rm -f /tmp/scaling-policy-config.json
+    rm -f ${INFRA_TMP_DIR}/scaling-policy-config.json
     
     log_info "Read replica autoscaling configured successfully"
 }
@@ -797,7 +797,7 @@ update_eb_environment_variables() {
     log_info "Updating Elastic Beanstalk environment variables..."
     
     # Create option settings JSON
-    cat > /tmp/db-env-options.json <<EOF
+    cat > ${INFRA_TMP_DIR}/db-env-options.json <<EOF
 [
     {
         "Namespace": "aws:elasticbeanstalk:application:environment",
@@ -862,7 +862,7 @@ EOF
     aws elasticbeanstalk update-environment \
         --application-name "$APP_NAME" \
         --environment-name "$env_name" \
-        --option-settings file:///tmp/db-env-options.json \
+        --option-settings file://${INFRA_TMP_DIR}/db-env-options.json \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION"
 
@@ -881,7 +881,7 @@ EOF
     log_info "  Username: $DB_USERNAME"
     
     # Clean up temp file
-    rm -f /tmp/db-env-options.json
+    rm -f ${INFRA_TMP_DIR}/db-env-options.json
 }
 
 # Main function to orchestrate RDS setup

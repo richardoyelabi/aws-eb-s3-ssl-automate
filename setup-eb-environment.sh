@@ -183,20 +183,10 @@ generate_instructions() {
 }
 
 cleanup_temp_files() {
-    # Clean up temporary files
-    rm -f /tmp/acm-cert-arn.txt
-    rm -f /tmp/eb-instance-profile.txt
-    rm -f /tmp/eb-env-url.txt
-    rm -f /tmp/cors-config*.json
-    rm -f /tmp/eb-trust-policy.json
-    rm -f /tmp/s3-access-policy.json
-    rm -f /tmp/eb-options.json
-    rm -f /tmp/https-options.json
-    rm -f /tmp/custom-domain.txt
-    rm -f /tmp/route53-*.json
-    rm -f /tmp/db-password.txt
-    rm -f /tmp/db-subnet-group.json
-    rm -f /tmp/db-env-options.json
+    # Clean up environment-specific temp directory
+    if [ -n "${INFRA_TMP_DIR:-}" ] && [ -d "$INFRA_TMP_DIR" ]; then
+        rm -rf "$INFRA_TMP_DIR"
+    fi
 }
 
 show_usage() {
@@ -303,6 +293,11 @@ main() {
     echo ""
 
     load_configuration "$cli_config" "$cli_env"
+
+    # Create environment-specific temp directory to avoid conflicts
+    # when setting up multiple environments concurrently
+    export INFRA_TMP_DIR="/tmp/${APP_NAME}-${ENV_NAME}-infra"
+    mkdir -p "$INFRA_TMP_DIR"
 
     check_prerequisites
 

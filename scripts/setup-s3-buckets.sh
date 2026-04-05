@@ -78,7 +78,7 @@ configure_static_assets_bucket() {
     fi
 
     # Configure CORS for static assets
-    cat > /tmp/cors-config.json <<EOF
+    cat > ${INFRA_TMP_DIR}/cors-config.json <<EOF
 {
     "CORSRules": [
         {
@@ -111,7 +111,7 @@ EOF
         log_info "Configuring CORS for $bucket_name"
         aws s3api put-bucket-cors \
             --bucket "$bucket_name" \
-            --cors-configuration file:///tmp/cors-config.json \
+            --cors-configuration file://${INFRA_TMP_DIR}/cors-config.json \
             --profile "$AWS_PROFILE" \
             --region "$region"
     fi
@@ -151,7 +151,7 @@ EOF
         log_info "Public access block already configured for $bucket_name"
     fi
 
-    rm -f /tmp/cors-config.json
+    rm -f ${INFRA_TMP_DIR}/cors-config.json
     log_info "Static assets bucket configured successfully"
 }
 
@@ -183,7 +183,7 @@ configure_uploads_bucket() {
     fi
 
     # Configure CORS for uploads
-    cat > /tmp/cors-config-uploads.json <<EOF
+    cat > ${INFRA_TMP_DIR}/cors-config-uploads.json <<EOF
 {
     "CORSRules": [
         {
@@ -216,7 +216,7 @@ EOF
         log_info "Configuring CORS for $bucket_name"
         aws s3api put-bucket-cors \
             --bucket "$bucket_name" \
-            --cors-configuration file:///tmp/cors-config-uploads.json \
+            --cors-configuration file://${INFRA_TMP_DIR}/cors-config-uploads.json \
             --profile "$AWS_PROFILE" \
             --region "$region"
     fi
@@ -256,7 +256,7 @@ EOF
         log_info "Public access block already configured for $bucket_name"
     fi
 
-    rm -f /tmp/cors-config-uploads.json
+    rm -f ${INFRA_TMP_DIR}/cors-config-uploads.json
     log_info "Uploads bucket configured successfully"
 }
 

@@ -248,11 +248,11 @@ test_cleanup_integration() {
     
     local setup_script="$SCRIPT_DIR/setup-eb-environment.sh"
     
-    if grep -q "/tmp/custom-domain.txt" "$setup_script" && \
-       grep -q "/tmp/route53-.*json" "$setup_script"; then
-        pass_test "Cleanup includes custom domain temp files"
+    if grep -q "INFRA_TMP_DIR" "$setup_script" && \
+       grep -q 'rm -rf "$INFRA_TMP_DIR"' "$setup_script"; then
+        pass_test "Cleanup removes environment-specific temp directory"
     else
-        fail_test "Cleanup missing custom domain temp files"
+        fail_test "Cleanup missing environment-specific temp directory removal"
     fi
 }
 

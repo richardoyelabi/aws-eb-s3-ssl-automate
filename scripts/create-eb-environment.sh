@@ -108,7 +108,7 @@ create_environment_options() {
     local cert_arn=$1
     local instance_profile=$2
 
-    cat > /tmp/eb-options.json <<EOF
+    cat > ${INFRA_TMP_DIR}/eb-options.json <<EOF
 [
   {
     "Namespace": "aws:autoscaling:launchconfiguration",
@@ -284,7 +284,7 @@ update_environment_configuration() {
     aws elasticbeanstalk update-environment \
         --application-name "$app_name" \
         --environment-name "$env_name" \
-        --option-settings file:///tmp/eb-options.json \
+        --option-settings file://${INFRA_TMP_DIR}/eb-options.json \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION"
     
@@ -294,7 +294,7 @@ update_environment_configuration() {
         sleep 30
     fi
     
-    rm -f /tmp/eb-options.json
+    rm -f ${INFRA_TMP_DIR}/eb-options.json
     log_info "Environment configuration updated successfully"
 }
 
@@ -332,7 +332,7 @@ create_environment() {
         --application-name "$app_name" \
         --environment-name "$env_name" \
         --solution-stack-name "$solution_stack" \
-        --option-settings file:///tmp/eb-options.json \
+        --option-settings file://${INFRA_TMP_DIR}/eb-options.json \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION"
 
@@ -341,7 +341,7 @@ create_environment() {
     # Skip wait loop in test mode
     if [ "$TEST_MODE" = "true" ]; then
         log_info "Skipping wait loop in test mode"
-        rm -f /tmp/eb-options.json
+        rm -f ${INFRA_TMP_DIR}/eb-options.json
         return 0
     fi
     
@@ -403,7 +403,7 @@ create_environment() {
         log_warn "The environment may complete successfully - verify in AWS Console"
     fi
 
-    rm -f /tmp/eb-options.json
+    rm -f ${INFRA_TMP_DIR}/eb-options.json
 }
 
 get_environment_url() {
@@ -426,16 +426,16 @@ main() {
 
     # Read certificate ARN
     local cert_arn
-    if [ -f /tmp/acm-cert-arn.txt ]; then
-        cert_arn=$(cat /tmp/acm-cert-arn.txt)
+    if [ -f ${INFRA_TMP_DIR}/acm-cert-arn.txt ]; then
+        cert_arn=$(cat ${INFRA_TMP_DIR}/acm-cert-arn.txt)
     else
         cert_arn="$ACM_CERTIFICATE_ARN"
     fi
 
     # Read instance profile
     local instance_profile
-    if [ -f /tmp/eb-instance-profile.txt ]; then
-        instance_profile=$(cat /tmp/eb-instance-profile.txt)
+    if [ -f ${INFRA_TMP_DIR}/eb-instance-profile.txt ]; then
+        instance_profile=$(cat ${INFRA_TMP_DIR}/eb-instance-profile.txt)
     else
         instance_profile="aws-elasticbeanstalk-ec2-role"
     fi
@@ -450,7 +450,7 @@ main() {
     local env_url=$(get_environment_url "$APP_NAME" "$ENV_NAME")
     
     export EB_ENVIRONMENT_URL="$env_url"
-    echo "$env_url" > /tmp/eb-env-url.txt
+    echo "$env_url" > ${INFRA_TMP_DIR}/eb-env-url.txt
 
     log_info "Elastic Beanstalk environment creation completed successfully"
     echo ""

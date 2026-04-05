@@ -108,17 +108,17 @@ configure_https_listener() {
   }
 ]"
 
-    echo "$options_json" > /tmp/https-options.json
+    echo "$options_json" > ${INFRA_TMP_DIR}/https-options.json
 
     log_info "Updating environment with HTTPS configuration..."
     aws elasticbeanstalk update-environment \
         --application-name "$app_name" \
         --environment-name "$env_name" \
-        --option-settings file:///tmp/https-options.json \
+        --option-settings file://${INFRA_TMP_DIR}/https-options.json \
         --profile "$AWS_PROFILE" \
         --region "$AWS_REGION"
 
-    rm -f /tmp/https-options.json
+    rm -f ${INFRA_TMP_DIR}/https-options.json
     log_info "HTTPS listener configured successfully"
 }
 
@@ -216,8 +216,8 @@ main() {
 
     # Read certificate ARN (only needed for custom domains)
     local cert_arn=""
-    if [ -f /tmp/acm-cert-arn.txt ]; then
-        cert_arn=$(cat /tmp/acm-cert-arn.txt)
+    if [ -f ${INFRA_TMP_DIR}/acm-cert-arn.txt ]; then
+        cert_arn=$(cat ${INFRA_TMP_DIR}/acm-cert-arn.txt)
     elif [ -n "$ACM_CERTIFICATE_ARN" ] && [ -n "$CUSTOM_DOMAIN" ]; then
         # Only use ACM_CERTIFICATE_ARN if CUSTOM_DOMAIN is configured
         cert_arn="$ACM_CERTIFICATE_ARN"
@@ -251,8 +251,8 @@ main() {
 
     # Read environment URL
     local env_url
-    if [ -f /tmp/eb-env-url.txt ]; then
-        env_url=$(cat /tmp/eb-env-url.txt)
+    if [ -f ${INFRA_TMP_DIR}/eb-env-url.txt ]; then
+        env_url=$(cat ${INFRA_TMP_DIR}/eb-env-url.txt)
     fi
 
     # Verify configuration

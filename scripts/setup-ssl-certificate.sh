@@ -271,7 +271,7 @@ main() {
     if validate_certificate "$cert_arn" "$AWS_REGION"; then
         # Export for use in other scripts
         export VALIDATED_ACM_CERT_ARN="$cert_arn"
-        echo "$cert_arn" > /tmp/acm-cert-arn.txt
+        echo "$cert_arn" > ${INFRA_TMP_DIR}/acm-cert-arn.txt
         
         log_info "SSL certificate validation completed successfully"
         echo ""
