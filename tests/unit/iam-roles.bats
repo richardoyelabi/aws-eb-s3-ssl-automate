@@ -120,6 +120,31 @@ teardown() {
     assert_output --partial "Using default Elastic Beanstalk IAM role"
 }
 
+@test "create_and_attach_s3_policy uses per-environment policy name" {
+    export STATIC_ASSETS_BUCKET="test-static"
+    export UPLOADS_BUCKET="test-uploads"
+    export ENV_NAME="dev"
+    run create_and_attach_s3_policy "test-role"
+    [ "$status" -eq 0 ]
+    assert_output --partial "test-role-s3-access-dev"
+}
+
+@test "different environments produce different policy names" {
+    export STATIC_ASSETS_BUCKET="app-static-dev"
+    export UPLOADS_BUCKET="app-uploads-dev"
+    export ENV_NAME="dev"
+    run create_and_attach_s3_policy "shared-role"
+    [ "$status" -eq 0 ]
+    assert_output --partial "shared-role-s3-access-dev"
+
+    export STATIC_ASSETS_BUCKET="app-static-staging"
+    export UPLOADS_BUCKET="app-uploads-staging"
+    export ENV_NAME="staging"
+    run create_and_attach_s3_policy "shared-role"
+    [ "$status" -eq 0 ]
+    assert_output --partial "shared-role-s3-access-staging"
+}
+
 @test "idempotency: running main twice succeeds" {
     export USE_DEFAULT_IAM_ROLE="false"
     export CUSTOM_IAM_ROLE_NAME="test-role"

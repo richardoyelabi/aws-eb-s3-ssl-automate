@@ -139,7 +139,7 @@ normalize_json() {
 
 create_and_attach_s3_policy() {
     local role_name=$1
-    local policy_name="${role_name}-s3-access"
+    local policy_name="${role_name}-s3-access-${ENV_NAME}"
     
     log_info "Creating S3 access policy: $policy_name"
 
