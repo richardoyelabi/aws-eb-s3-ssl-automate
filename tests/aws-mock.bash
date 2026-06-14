@@ -589,6 +589,14 @@ CONFIGJSON
                 echo '{"CertificateSummaryList": [{"DomainName": "example.com", "CertificateArn": "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"}]}'
             fi
             ;;
+        acm.request-certificate)
+            local new_arn="arn:aws:acm:us-east-1:123456789012:certificate/new-00000000-0000-0000-0000-000000000000"
+            if [[ "$all_args" == *"CertificateArn"* ]] && [[ "$all_args" == *"--output text"* ]]; then
+                echo "$new_arn"
+            else
+                echo '{"CertificateArn": "'"$new_arn"'"}'
+            fi
+            ;;
         acm.describe-certificate)
             local query=$(get_arg_value "--query" "$all_args")
             local mock_status="${MOCK_ACM_CERT_STATUS:-ISSUED}"
