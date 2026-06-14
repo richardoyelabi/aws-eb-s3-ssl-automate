@@ -201,7 +201,19 @@ For developers: Run unit and integration tests to verify code functionality:
 
 ### 4. Request SSL Certificate (if needed)
 
-If you don't have an ACM certificate yet, you can request one:
+If you don't have an ACM certificate yet, the easiest path is the helper script. It is idempotent: if a certificate already exists for the domain it just prints the DNS validation records to add; if none exists it requests one (apex + `*.` wildcard, DNS validation) and then prints the records:
+
+```bash
+# Uses DOMAIN_NAME from config.env, or pass a domain explicitly
+./scripts/request-ssl-certificate.sh
+./scripts/request-ssl-certificate.sh example.com
+```
+
+The script prints a CNAME record (Name + Value) to add at your DNS provider. A certificate covering both `example.com` and `*.example.com` uses a single shared CNAME, so you only add one record. If your domain is hosted in Route 53, you can add it with [`./scripts/setup-route53-dns.sh`](#route-53-dns-management-script).
+
+#### Manual alternative
+
+You can also request the certificate directly:
 
 ```bash
 aws acm request-certificate \
@@ -210,6 +222,17 @@ aws acm request-certificate \
   --validation-method DNS \
   --region us-east-1
 ```
+
+This returns a certificate ARN but not the DNS records. Retrieve them with:
+
+```bash
+aws acm describe-certificate \
+  --certificate-arn YOUR_CERT_ARN \
+  --region us-east-1 \
+  --query "Certificate.DomainValidationOptions"
+```
+
+Then add the returned CNAME record at your DNS provider.
 
 **Note:** You don't need to wait for the certificate to be issued before running the setup script. The script will automatically detect if your certificate is pending validation, display the required DNS records, and give you options to:
 - Wait for validation (with automatic polling)
@@ -441,6 +464,7 @@ The scripts will **never** create duplicate resources:
 ├── scripts/
 │   ├── setup-s3-buckets.sh         # S3 bucket creation and configuration
 │   ├── setup-ssl-certificate.sh    # ACM certificate validation
+│   ├── request-ssl-certificate.sh  # Request ACM cert if missing and show DNS validation records
 │   ├── setup-iam-roles.sh          # IAM role and policy setup
 │   ├── create-eb-environment.sh    # EB environment creation
 │   ├── configure-ssl.sh            # Load balancer SSL configuration
